@@ -1,6 +1,7 @@
 /**
  * Photo Contest — Interface Galerie Candidat
  * Gestion : upload AJAX, drag-and-drop réordonnancement, sélection, lightbox, filtres
+ * v2 : rendu par sections de catégorie, upload ciblé par catégorie
  */
 (function () {
   'use strict';
@@ -11,20 +12,25 @@
   // Libellés statuts (injectés depuis PHP)
   const STATUTS_LABELS = CFG.statuts || {};
 
+  // Dépôt actif (injecté depuis PHP)
+  const PC_DEPOT_ACTIF = !!CFG.depotActif;
+
   // État global
   const state = {
-    photos:         [],   // tableau d'objets photo
-    selection:      new Set(),
-    filtreActif:    'tous',
-    dragSrcId:      null,
-    lightboxPhotoId: null,
+    photos:           [],   // tableau plat dérivé de toutes les sections (compat filtres/lightbox)
+    categories:       [],   // tableau de { id, nom, quota, photos[] }
+    selection:        new Set(),
+    filtreActif:      'tous',
+    dragSrcId:        null,
+    lightboxPhotoId:  null,
+    uploadCategoryId: 0,    // catégorie cible de l'upload en cours
   };
 
   // ── Sélecteurs DOM ─────────────────────────────────────────────────
   const $ = (sel, ctx = document) => ctx.querySelector(sel);
   const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
-  let elGrid, elSidebar, elToolbar, elDropZone, elFileInput,
+  let elSections, elSidebar, elToolbar, elDropZone, elFileInput,
       elBtnUpload, elBtnSupprSel, elSelectionInfo,
       elProgressWrap, elProgressBar, elLightbox,
       elToastContainer, elPageDropOverlay,
@@ -32,7 +38,7 @@
 
   // ── Init ───────────────────────────────────────────────────────────
   function init() {
-    elGrid           = $('.pc-grid');
+    elSections       = $('#pc-gallery-sections');
     elSidebar        = $('.pc-sidebar');
     elDropZone       = $('.pc-drop-zone');
     elFileInput      = $('.pc-drop-zone__input');
@@ -47,7 +53,7 @@
     elQuotaFill      = $('.pc-quota-bar__fill');
     elQuotaLabel     = $('.pc-quota-label');
 
-    if (!elGrid) return;
+    if (!elSections) return;
 
     bindEvents();
     chargerPhotos();
@@ -68,38 +74,68 @@
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        state.photos = data.data.photos || [];
+        state.categories = data.data.categories || [];
+        // Tableau plat pour la compatibilité lightbox / filtres
+        state.photos     = state.categories.flatMap(s => s.photos || []);
+        // Catégorie cible upload : première section active avec quota disponible
+        const firstActive = state.categories.find(s => s.id > 0 && (s.photos || []).length < s.quota);
+        state.uploadCategoryId = firstActive ? firstActive.id : 0;
         renderGalerie();
         mettreAJourQuota(data.data.quota_utilise, data.data.quota_max);
         mettreAJourFiltres(data.data.stats_statuts || {});
       } else {
-        elGrid.innerHTML = '';
+        elSections.innerHTML = '';
         afficherErreur(data.data?.message || 'Erreur de chargement.');
       }
     })
     .catch(() => afficherErreur('Connexion impossible.'));
   }
 
-  // ── Rendu de la grille ─────────────────────────────────────────────
+  // ── Rendu de la galerie en sections par catégorie ──────────────────
   function renderGalerie() {
-    elGrid.innerHTML = '';
+    if (!elSections) return;
+    elSections.innerHTML = '';
     state.selection.clear();
     mettreAJourBarre();
 
-    const photosFiltrees = filtrerPhotos();
-
-    if (photosFiltrees.length === 0) {
-      elGrid.parentElement.innerHTML += templateVide();
+    if (state.categories.length === 0) {
+      elSections.innerHTML = '<p class="pc-empty">Aucune catégorie disponible.</p>';
       return;
     }
 
-    // Retire le message vide éventuel
-    const vide = document.querySelector('.pc-empty');
-    if (vide) vide.remove();
+    state.categories.forEach(section => {
+      const photosFiltrees = filtrerPhotos(section.photos);
+      const filled   = (section.photos || []).length;
+      const quota    = section.quota || 0;
+      const canAdd   = section.id > 0 && filled < quota && PC_DEPOT_ACTIF;
 
-    photosFiltrees.forEach(photo => {
-      const carte = creerCarte(photo);
-      elGrid.appendChild(carte);
+      const sec = document.createElement('section');
+      sec.className   = 'pc-gallery-section';
+      sec.dataset.catId = section.id;
+
+      sec.innerHTML = `
+        <header class="pc-gallery-section__header">
+          <h2 class="pc-gallery-section__title">${escHTML(section.nom)}</h2>
+          <span class="pc-gallery-section__count">${filled} / ${quota || '∞'}</span>
+        </header>
+        <div class="pc-gallery-section__grid pc-grid" data-cat-id="${section.id}"></div>
+        ${canAdd
+          ? `<button class="pc-add-btn" data-cat-id="${section.id}">+ Ajouter une photo</button>`
+          : (section.id > 0 ? `<p class="pc-add-disabled">Quota atteint</p>` : '')}
+      `;
+
+      const gridEl = sec.querySelector('.pc-gallery-section__grid');
+
+      if (photosFiltrees.length === 0 && filled === 0) {
+        gridEl.innerHTML = `<div class="pc-empty pc-empty--section">
+          <div class="pc-empty__icon">&#9728;</div>
+          <p class="pc-empty__sub">Aucune photo dans cette catégorie.</p>
+        </div>`;
+      } else {
+        photosFiltrees.forEach(photo => gridEl.appendChild(creerCarte(photo)));
+      }
+
+      elSections.appendChild(sec);
     });
 
     initDragDrop();
@@ -195,18 +231,15 @@
     return div;
   }
 
-  function templateVide() {
-    return `<div class="pc-empty">
-      <div class="pc-empty__icon">&#9728;</div>
-      <p class="pc-empty__titre">Aucune photo déposée</p>
-      <p class="pc-empty__sub">Glissez vos photos dans la zone ci-dessous ou cliquez sur « Ajouter ».</p>
-    </div>`;
-  }
-
   // ── Filtres sidebar ────────────────────────────────────────────────
-  function filtrerPhotos() {
-    if (state.filtreActif === 'tous') return state.photos;
-    return state.photos.filter(p => p.statut === state.filtreActif);
+  /**
+   * Filtre un tableau de photos par statut actif.
+   * @param {Array} photos - tableau de photos (section ou global)
+   */
+  function filtrerPhotos(photos) {
+    const src = photos || state.photos;
+    if (state.filtreActif === 'tous') return src;
+    return src.filter(p => p.statut === state.filtreActif);
   }
 
   function mettreAJourFiltres(stats) {
@@ -267,15 +300,24 @@
   }
 
   function uploadFichier(fichier) {
-    // Carte placeholder pendant l'upload
-    const tempId   = 'temp_' + Date.now();
+    // Carte placeholder pendant l'upload — insérée dans la section cible
+    const tempId    = 'temp_' + Date.now();
     const tempCarte = creerCarteUpload(tempId, fichier.name);
-    elGrid.prepend(tempCarte);
+
+    const targetGrid = elSections
+      ? elSections.querySelector(`.pc-gallery-section__grid[data-cat-id="${state.uploadCategoryId}"]`)
+      : null;
+    if (targetGrid) {
+      targetGrid.prepend(tempCarte);
+    } else if (elSections) {
+      elSections.prepend(tempCarte);
+    }
 
     const formData = new FormData();
-    formData.append('action', 'pc_upload_photo');
-    formData.append('nonce',  CFG.nonceUpload);
-    formData.append('photo',  fichier);
+    formData.append('action',      'pc_upload_photo');
+    formData.append('nonce',       CFG.nonceUpload);
+    formData.append('photo',       fichier);
+    formData.append('category_id', state.uploadCategoryId);
 
     const xhr = new XMLHttpRequest();
 
@@ -284,20 +326,20 @@
         const pct = Math.round((e.loaded / e.total) * 100);
         const pctEl = tempCarte.querySelector('.pc-upload-pct');
         if (pctEl) pctEl.textContent = pct + '%';
-        elProgressBar.style.width = pct + '%';
+        if (elProgressBar) elProgressBar.style.width = pct + '%';
       }
     });
 
     xhr.addEventListener('load', () => {
-      elProgressWrap.classList.remove('visible');
-      elProgressBar.style.width = '0%';
+      if (elProgressWrap) elProgressWrap.classList.remove('visible');
+      if (elProgressBar)  elProgressBar.style.width = '0%';
       tempCarte.remove();
 
       try {
         const data = JSON.parse(xhr.responseText);
         if (data.success) {
           toast('Photo déposée avec succès.', 'succes');
-          chargerPhotos(); // recharge complète pour synchro serveur
+          chargerPhotos(); // recharge complète pour synchro serveur + màj compteurs
         } else {
           toast(data.data?.message || 'Erreur lors du dépôt.', 'erreur');
         }
@@ -307,12 +349,12 @@
     });
 
     xhr.addEventListener('error', () => {
-      elProgressWrap.classList.remove('visible');
+      if (elProgressWrap) elProgressWrap.classList.remove('visible');
       tempCarte.remove();
       toast('Erreur réseau lors du dépôt.', 'erreur');
     });
 
-    elProgressWrap.classList.add('visible');
+    if (elProgressWrap) elProgressWrap.classList.add('visible');
     xhr.open('POST', CFG.ajaxUrl);
     xhr.send(formData);
   }
@@ -338,7 +380,9 @@
       state.selection.add(photoId);
     }
 
-    const carte = elGrid.querySelector(`[data-id="${photoId}"]`);
+    const carte = elSections
+      ? elSections.querySelector(`[data-id="${photoId}"]`)
+      : null;
     if (carte) carte.classList.toggle('selectionne', state.selection.has(photoId));
 
     mettreAJourBarre();
@@ -380,10 +424,9 @@
     .then(data => {
       if (data.success) {
         toast('Photo supprimée.', 'succes');
-        state.photos = state.photos.filter(p => String(p.id) !== String(photoId));
         state.selection.delete(String(photoId));
-        renderGalerie();
-        mettreAJourQuota(state.photos.length, parseInt(elQuotaLabel?.textContent?.split('/')[1]) || CFG.quotaMax);
+        // Recharge complète pour mettre à jour les compteurs par section
+        chargerPhotos();
       } else {
         toast(data.data?.message || 'Suppression impossible.', 'erreur');
       }
@@ -391,50 +434,55 @@
     .catch(() => toast('Erreur réseau.', 'erreur'));
   }
 
-  // ── Drag & drop réordonnancement ───────────────────────────────────
+  // ── Drag & drop réordonnancement (intra-section) ───────────────────
   function initDragDrop() {
-    const cartes = elGrid.querySelectorAll('.pc-card[draggable="true"]');
+    if (!elSections) return;
 
-    cartes.forEach(carte => {
-      carte.addEventListener('dragstart', e => {
-        state.dragSrcId = carte.dataset.id;
-        carte.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-      });
+    // Opère sur chaque grille de section indépendamment
+    $$('.pc-gallery-section__grid', elSections).forEach(grid => {
+      const cartes = $$('.pc-card[draggable="true"]', grid);
 
-      carte.addEventListener('dragend', () => {
-        carte.classList.remove('dragging');
-        elGrid.querySelectorAll('.pc-card').forEach(c => c.classList.remove('drag-over'));
-        sauvegarderOrdre();
-      });
+      cartes.forEach(carte => {
+        carte.addEventListener('dragstart', e => {
+          state.dragSrcId = carte.dataset.id;
+          carte.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
 
-      carte.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (carte.dataset.id !== state.dragSrcId) {
-          elGrid.querySelectorAll('.pc-card').forEach(c => c.classList.remove('drag-over'));
-          carte.classList.add('drag-over');
-        }
-      });
+        carte.addEventListener('dragend', () => {
+          carte.classList.remove('dragging');
+          $$('.pc-card', grid).forEach(c => c.classList.remove('drag-over'));
+          sauvegarderOrdre(grid);
+        });
 
-      carte.addEventListener('drop', e => {
-        e.preventDefault();
-        if (!state.dragSrcId || carte.dataset.id === state.dragSrcId) return;
+        carte.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (carte.dataset.id !== state.dragSrcId) {
+            $$('.pc-card', grid).forEach(c => c.classList.remove('drag-over'));
+            carte.classList.add('drag-over');
+          }
+        });
 
-        const src  = elGrid.querySelector(`[data-id="${state.dragSrcId}"]`);
-        const dest = carte;
-        if (!src || !dest) return;
+        carte.addEventListener('drop', e => {
+          e.preventDefault();
+          if (!state.dragSrcId || carte.dataset.id === state.dragSrcId) return;
 
-        const srcIdx  = [...elGrid.children].indexOf(src);
-        const destIdx = [...elGrid.children].indexOf(dest);
+          const src  = grid.querySelector(`[data-id="${state.dragSrcId}"]`);
+          const dest = carte;
+          if (!src || !dest) return;
 
-        if (srcIdx < destIdx) {
-          dest.after(src);
-        } else {
-          dest.before(src);
-        }
+          const srcIdx  = [...grid.children].indexOf(src);
+          const destIdx = [...grid.children].indexOf(dest);
 
-        carte.classList.remove('drag-over');
+          if (srcIdx < destIdx) {
+            dest.after(src);
+          } else {
+            dest.before(src);
+          }
+
+          carte.classList.remove('drag-over');
+        });
       });
     });
   }
@@ -443,8 +491,8 @@
     return ['en_attente', 'refusee'].includes(photo.statut);
   }
 
-  function sauvegarderOrdre() {
-    const ids = [...elGrid.querySelectorAll('.pc-card[data-id]')]
+  function sauvegarderOrdre(grid) {
+    const ids = $$('.pc-card[data-id]', grid)
       .map(c => c.dataset.id)
       .filter(id => !id.startsWith('temp_'));
 
@@ -499,12 +547,17 @@
 
   // ── Skeletons ─────────────────────────────────────────────────────
   function afficherSkeletons(nb) {
-    elGrid.innerHTML = '';
+    if (!elSections) return;
+    elSections.innerHTML = '';
+    // Affiche les skeletons dans un conteneur temporaire
+    const tempGrid = document.createElement('div');
+    tempGrid.className = 'pc-gallery-section__grid pc-grid';
     for (let i = 0; i < nb; i++) {
       const div = document.createElement('div');
       div.className = 'pc-card pc-card--skeleton';
-      elGrid.appendChild(div);
+      tempGrid.appendChild(div);
     }
+    elSections.appendChild(tempGrid);
   }
 
   // ── Toast ──────────────────────────────────────────────────────────
@@ -620,6 +673,16 @@
         e.preventDefault();
         elDropZone.classList.remove('dragover');
         if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files);
+      });
+    }
+
+    // Délégation pour les boutons "+ Ajouter une photo" par section
+    if (elSections) {
+      elSections.addEventListener('click', e => {
+        const btn = e.target.closest('.pc-add-btn');
+        if (!btn) return;
+        state.uploadCategoryId = parseInt(btn.dataset.catId, 10) || 0;
+        if (elFileInput) elFileInput.click();
       });
     }
 

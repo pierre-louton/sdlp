@@ -58,6 +58,7 @@ function pc_load_plugin(): void {
 
     // Modules cœur
     require_once PC_PLUGIN_DIR . 'includes/class-pc-database.php';
+    require_once PC_PLUGIN_DIR . 'includes/class-pc-categories.php';
     require_once PC_PLUGIN_DIR . 'includes/class-pc-roles.php';
     require_once PC_PLUGIN_DIR . 'includes/class-pc-settings.php';
     require_once PC_PLUGIN_DIR . 'includes/class-pc-security.php';

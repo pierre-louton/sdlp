@@ -196,19 +196,20 @@ class PC_Shortcodes {
 
     public function ajax_get_photos(): void {
         check_ajax_referer( 'pc_get_photos_nonce', 'nonce' );
-        if ( ! is_user_logged_in() || ! PC_Roles::is_candidat() )
-            wp_send_json_error( [ 'message' => __( 'Non autorisé.', 'photo-contest' ) ] );
+        if ( ! is_user_logged_in() || ! PC_Roles::is_candidat() ) {
+            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
+        }
 
-        $user_id = get_current_user_id();
-        $photos  = PC_Photos::get_instance()->get_user_photos( $user_id );
-        $quota   = (int) PC_Settings::get( 'quota_photos', 5 );
+        $user_id    = get_current_user_id();
+        $photos     = PC_Photos::get_instance()->get_user_photos( $user_id );
+        $quota      = (int) PC_Settings::get( 'quota_photos', 5 );
+        $categories = PC_Categories::get_all( true ); // only active
 
-        $photos = array_map( function ( $photo ) {
-            $user_id = get_current_user_id();
+        // Enrichir chaque photo (URLs)
+        $photos = array_map( function ( $photo ) use ( $user_id ) {
             $photo['url_thumb'] = $this->get_photo_url( (int) $photo['id'], 'thumb' );
             $photo['url_full']  = $this->get_photo_url( (int) $photo['id'], 'full' );
 
-            // URL de paiement pour les photos en participation_demandee
             if ( $photo['statut'] === 'participation_demandee' ) {
                 $token = wp_create_nonce( "pc_payment_{$user_id}_{$photo['id']}" );
                 $base  = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
@@ -224,15 +225,50 @@ class PC_Shortcodes {
             return $photo;
         }, $photos );
 
+        // Bucket photos by category_id
+        $by_category = [];
+        foreach ( $photos as $p ) {
+            $cid = (int) ( $p['category_id'] ?? 0 );
+            $by_category[ $cid ][] = $p;
+        }
+
+        // Build active-category sections (always present, even empty)
+        $sections = [];
+        foreach ( $categories as $cat ) {
+            $cid = (int) $cat['id'];
+            $sections[] = [
+                'id'     => $cid,
+                'nom'    => $cat['nom'],
+                'quota'  => $quota,
+                'photos' => $by_category[ $cid ] ?? [],
+            ];
+            unset( $by_category[ $cid ] );
+        }
+
+        // Append "Non classées" section if any photo points to an inactive/deleted category
+        $orphelines = [];
+        foreach ( $by_category as $list ) {
+            $orphelines = array_merge( $orphelines, $list );
+        }
+        if ( ! empty( $orphelines ) ) {
+            $sections[] = [
+                'id'     => 0,
+                'nom'    => __( 'Non classées', PC_TEXT_DOMAIN ),
+                'quota'  => 0,
+                'photos' => $orphelines,
+            ];
+        }
+
+        // Stats statuts (unchanged behavior)
         $stats = [];
         foreach ( $photos as $p ) {
             $stats[ $p['statut'] ] = ( $stats[ $p['statut'] ] ?? 0 ) + 1;
         }
 
         wp_send_json_success( [
-            'photos'        => $photos,
-            'quota_utilise' => count( $photos ),
+            'categories'    => $sections,
             'quota_max'     => $quota,
+            'quota_utilise' => count( $photos ),
             'stats_statuts' => $stats,
         ] );
     }

@@ -77,6 +77,9 @@
 
     const pmtClass = item.statut_paiement === 'paiement_recu' ? 'pcc-pmt--paye' : 'pcc-pmt--attente';
     const pmtLabel = item.statut_paiement === 'paiement_recu' ? 'Payé' : 'En attente';
+    const catBadge = item.nom_categorie
+      ? `<span class="pc-cat-badge">${esc(item.nom_categorie)}</span>`
+      : '';
 
     div.innerHTML = `
       <img class="pcc-planche__img pcc-planche__img--load"
@@ -84,7 +87,7 @@
       <div class="pcc-planche__overlay"></div>
       <span class="pcc-planche__num">${num}</span>
       <span class="pcc-planche__pmt ${pmtClass}">${pmtLabel}</span>
-      <span class="pcc-planche__titre">${esc(item.titre_catalogue || 'Sans titre')}</span>
+      <span class="pcc-planche__titre">${esc(item.titre_catalogue || 'Sans titre')}${catBadge}</span>
       ${item.inclus_catalogue ? '<span class="pcc-planche__inclu"></span>' : ''}
     `;
 

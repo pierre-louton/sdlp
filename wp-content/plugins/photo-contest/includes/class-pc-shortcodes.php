@@ -37,7 +37,7 @@ class PC_Shortcodes {
 
     private function enqueue_catalogue_assets(): void {
         wp_enqueue_style( 'pc-catalogue', PC_PLUGIN_URL . 'public/css/pc-catalogue.css', [], PC_VERSION . '.3' );
-        wp_enqueue_script( 'pc-catalogue', PC_PLUGIN_URL . 'public/js/pc-catalogue.js', [], PC_VERSION, true );
+        wp_enqueue_script( 'pc-catalogue', PC_PLUGIN_URL . 'public/js/pc-catalogue.js', [], PC_VERSION . '.3', true );
         wp_localize_script( 'pc-catalogue', 'pcCatalogueConfig', [
             'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
             'nonceGet'    => wp_create_nonce( 'pc_catalogue_get_nonce' ),

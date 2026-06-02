@@ -51,16 +51,19 @@ class PC_Catalogue {
 
     public function get_items(): array {
         global $wpdb;
-        $tc = PC_Database::table( PC_Database::TABLE_CATALOGUE );
-        $tp = PC_Database::table( PC_Database::TABLE_PHOTOS );
-        $tt = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $tc   = PC_Database::table( PC_Database::TABLE_CATALOGUE );
+        $tp   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $tt   = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $tcat = PC_Database::table( PC_Database::TABLE_CATEGORIES );
         $rows = $wpdb->get_results(
             "SELECT c.*, p.largeur_px, p.hauteur_px, p.ratio_type, p.statut, p.nom_fichier, p.chemin_fichier,
+                    p.category_id, cat.nom AS nom_categorie,
                     COALESCE(pay.statut_paiement,'en_attente') AS statut_paiement
              FROM {$tc} c
              JOIN {$tp} p ON p.id = c.photo_id
+             LEFT JOIN {$tcat} cat ON cat.id = p.category_id
              LEFT JOIN {$tt} pay ON pay.photo_id = c.photo_id AND pay.statut_paiement = 'paiement_recu'
-             ORDER BY c.ordre_catalogue ASC",
+             ORDER BY p.category_id ASC, c.ordre_catalogue ASC",
             ARRAY_A
         ) ?: [];
         return array_map( function( $row ) {
@@ -68,6 +71,38 @@ class PC_Catalogue {
             $row['url_full']  = $this->get_photo_url( (int) $row['photo_id'], 'full' );
             return $row;
         }, $rows );
+    }
+
+    /**
+     * Retourne les items du catalogue groupés par catégorie.
+     * Structure : [ ['id' => int, 'nom' => string, 'items' => [...]], ... ]
+     *
+     * @param bool $only_included Si true, n'inclut que les items `inclus_catalogue = 1`.
+     */
+    public function get_items_grouped_by_category( bool $only_included = false ): array {
+        $items = $this->get_items();
+        if ( $only_included ) {
+            $items = array_values( array_filter( $items, fn( $i ) => (bool) $i['inclus_catalogue'] ) );
+        }
+
+        // Group by category
+        $groups = [];
+        foreach ( $items as $item ) {
+            $cid  = (int) ( $item['category_id'] ?? 0 );
+            $cnom = $item['nom_categorie'] ?? __( 'Non classées', PC_TEXT_DOMAIN );
+            if ( ! isset( $groups[ $cid ] ) ) {
+                $groups[ $cid ] = [
+                    'id'    => $cid,
+                    'nom'   => $cnom,
+                    'items' => [],
+                ];
+            }
+            $groups[ $cid ]['items'][] = $item;
+        }
+
+        // Return as sequential array, sorted by category id ASC
+        ksort( $groups, SORT_NUMERIC );
+        return array_values( $groups );
     }
 
     // ── Écriture ──────────────────────────────────────────────────────
@@ -114,11 +149,12 @@ class PC_Catalogue {
         if ( $edition ) $lignes[] = 'Édition;'   . $this->csv_esc( $edition );
         if ( $lignes ) $lignes[] = ''; // ligne vide de séparation
 
-        $lignes[] = implode( ';', [ 'Numéro','Référence','Titre','Biographie','Tirage','Dimensions','Ratio','Paiement' ] );
+        $lignes[] = implode( ';', [ 'Numéro','Référence','Catégorie','Titre','Biographie','Tirage','Dimensions','Ratio','Paiement' ] );
         foreach ( $items as $k => $item ) {
             $lignes[] = implode( ';', array_map( [ $this, 'csv_esc' ], [
                 $k + 1,
                 '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT ),
+                $item['nom_categorie'] ?: '—',
                 $item['titre_catalogue'] ?: '—',
                 preg_replace( '/\s+/', ' ', stripslashes( $item['biographie'] ) ) ?: '—',
                 stripslashes( $item['tirage'] ) ?: '—',
@@ -138,21 +174,32 @@ class PC_Catalogue {
     // ── Export JSON ───────────────────────────────────────────────────
 
     public function export_json(): string {
-        $items = array_values( array_filter( $this->get_items(), fn($i) => (bool) $i['inclus_catalogue'] ) );
-        $planches = array_map( fn($item, $i) => [
-            'numero'     => $i + 1,
-            'reference'  => '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT ),
-            'titre'      => $item['titre_catalogue'] ?: null,
-            'biographie' => $item['biographie'] ?: null,
-            'tirage'     => $item['tirage'] ?: null,
-            'image'      => [
-                'largeur' => (int) $item['largeur_px'],
-                'hauteur' => (int) $item['hauteur_px'],
-                'ratio'   => $item['ratio_type'],
-                'fichier' => basename( $item['nom_fichier'] ),
-            ],
-            'paiement' => $item['statut_paiement'],
-        ], $items, array_keys( $items ) );
+        $groups = $this->get_items_grouped_by_category( true );
+
+        $categories_json = array_map( function ( $group ) {
+            $planches = array_map( fn( $item, $i ) => [
+                'numero'     => $i + 1,
+                'reference'  => '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT ),
+                'titre'      => $item['titre_catalogue'] ?: null,
+                'biographie' => $item['biographie'] ?: null,
+                'tirage'     => $item['tirage'] ?: null,
+                'image'      => [
+                    'largeur' => (int) $item['largeur_px'],
+                    'hauteur' => (int) $item['hauteur_px'],
+                    'ratio'   => $item['ratio_type'],
+                    'fichier' => basename( $item['nom_fichier'] ),
+                ],
+                'paiement' => $item['statut_paiement'],
+            ], $group['items'], array_keys( $group['items'] ) );
+            return [
+                'id'          => $group['id'],
+                'nom'         => $group['nom'],
+                'nb_planches' => count( $planches ),
+                'planches'    => $planches,
+            ];
+        }, $groups );
+
+        $total_planches = array_sum( array_map( fn( $g ) => count( $g['items'] ), $groups ) );
 
         return wp_json_encode( [
             'catalogue'   => [
@@ -162,8 +209,8 @@ class PC_Catalogue {
                 'isbn'       => PC_Settings::get( 'catalogue_isbn' ),
                 'date_export'=> current_time( 'c' ),
             ],
-            'nb_planches' => count( $planches ),
-            'planches'    => $planches,
+            'nb_planches' => $total_planches,
+            'categories'  => $categories_json,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
     }
 
@@ -175,7 +222,6 @@ class PC_Catalogue {
             throw new \RuntimeException( __( 'mPDF non installé. Lancez : composer require mpdf/mpdf dans le dossier du plugin.', 'photo-contest' ) );
         require_once $autoload;
 
-        $items       = array_values( array_filter( $this->get_items(), fn($i) => (bool) $i['inclus_catalogue'] ) );
         $titre       = PC_Settings::get( 'catalogue_titre', 'Catalogue' );
         $sous_titre  = PC_Settings::get( 'catalogue_sous_titre', '' );
         $edition     = PC_Settings::get( 'edition', '' );
@@ -253,64 +299,87 @@ class PC_Catalogue {
         global $wpdb;
         $profiles_table = PC_Database::table( PC_Database::TABLE_PROFILES );
 
-        // Planches
-        foreach ( $items as $i => $item ) {
+        // Planches groupées par catégorie
+        $groups        = $this->get_items_grouped_by_category( true );
+        $planche_index = 0; // numéro de planche global (cumulatif sur toutes catégories)
+
+        foreach ( $groups as $group ) {
+            // Page séparatrice de chapitre par catégorie
             $mpdf->AddPage();
+            $mpdf->WriteHTML(
+                '<div style="text-align:center;margin-top:80mm;font-family:Georgia,serif;">'
+                . '<h1 style="font-size:32pt;font-weight:normal;color:#0E2340;letter-spacing:2px;">'
+                . esc_html( $group['nom'] )
+                . '</h1>'
+                . '<p style="font-size:10pt;color:#888;margin-top:8mm;">'
+                . sprintf(
+                    /* translators: %d = nombre de planches */
+                    esc_html__( '%d planche(s)', PC_TEXT_DOMAIN ),
+                    count( $group['items'] )
+                )
+                . '</p>'
+                . '</div>'
+            );
 
-            // Nom candidat depuis profiles
-            $profile = $wpdb->get_row( $wpdb->prepare(
-                "SELECT prenom, nom FROM {$profiles_table} WHERE user_id = %d",
-                $item['user_id']
-            ), ARRAY_A );
-            $nom_candidat = $profile
-                ? trim( $profile['prenom'] . ' ' . $profile['nom'] )
-                : get_userdata( $item['user_id'] )->display_name;
+            foreach ( $group['items'] as $item ) {
+                $planche_index++;
+                $mpdf->AddPage();
 
-            $img_html = '';
-            if ( ! empty( $item['chemin_fichier'] ) && file_exists( $item['chemin_fichier'] ) ) {
-                $img_html = '<img src="' . esc_attr( $item['chemin_fichier'] ) . '" style="max-width:100%;max-height:175mm;display:block;">';
+                // Nom candidat depuis profiles
+                $profile = $wpdb->get_row( $wpdb->prepare(
+                    "SELECT prenom, nom FROM {$profiles_table} WHERE user_id = %d",
+                    $item['user_id']
+                ), ARRAY_A );
+                $nom_candidat = $profile
+                    ? trim( $profile['prenom'] . ' ' . $profile['nom'] )
+                    : get_userdata( $item['user_id'] )->display_name;
+
+                $img_html = '';
+                if ( ! empty( $item['chemin_fichier'] ) && file_exists( $item['chemin_fichier'] ) ) {
+                    $img_html = '<img src="' . esc_attr( $item['chemin_fichier'] ) . '" style="max-width:100%;max-height:175mm;display:block;">';
+                }
+
+                $ref    = '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT );
+                $orient = $item['ratio_type'] === '3_2' ? 'Paysage' : 'Portrait';
+                $dims   = $item['largeur_px'] . ' × ' . $item['hauteur_px'] . ' px';
+
+                $mpdf->WriteHTML( '
+                <div style="font-family:Georgia,serif;padding:6mm 0;">
+                  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                    <td width="63%" style="vertical-align:middle;padding-right:10mm;">' . $img_html . '</td>
+                    <td width="37%" style="vertical-align:top;padding-left:6mm;border-left:0.5pt solid #C49A3C;">
+
+                      <p style="font-size:7pt;color:#C49A3C;font-family:Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;margin-bottom:5mm;">
+                        Planche ' . sprintf( '%02d', $planche_index ) . ' &nbsp;—&nbsp; ' . esc_html( $ref ) . '
+                      </p>
+
+                      <h2 style="font-size:13pt;font-weight:normal;color:#0E2340;margin-bottom:3mm;line-height:1.3;">
+                        ' . esc_html( $item['titre_catalogue'] ?: ( 'Planche ' . $planche_index ) ) . '
+                      </h2>
+
+                      <p style="font-size:9pt;color:#555;font-family:Arial,sans-serif;margin-bottom:5mm;font-style:italic;">
+                        ' . esc_html( $nom_candidat ) . '
+                      </p>
+
+                      ' . ( $item['biographie'] ? '
+                      <p style="font-size:8.5pt;color:#333;line-height:1.65;margin-bottom:5mm;">
+                        ' . nl2br( esc_html( stripslashes( $item['biographie'] ) ) ) . '
+                      </p>' : '' ) . '
+
+                      ' . ( $item['tirage'] ? '
+                      <p style="font-size:8pt;color:#666;font-family:Arial,sans-serif;margin-bottom:3mm;">
+                        <span style="color:#aaa;font-size:7pt;text-transform:uppercase;letter-spacing:1px;">Tirage</span><br>
+                        ' . esc_html( stripslashes( $item['tirage'] ) ) . '
+                      </p>' : '' ) . '
+
+                      <p style="font-size:7pt;color:#bbb;font-family:Arial,sans-serif;margin-top:6mm;">
+                        ' . esc_html( $dims ) . ' &nbsp;—&nbsp; ' . esc_html( $orient ) . '
+                      </p>
+
+                    </td>
+                  </tr></table>
+                </div>' );
             }
-
-            $ref    = '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT );
-            $orient = $item['ratio_type'] === '3_2' ? 'Paysage' : 'Portrait';
-            $dims   = $item['largeur_px'] . ' × ' . $item['hauteur_px'] . ' px';
-
-            $mpdf->WriteHTML( '
-            <div style="font-family:Georgia,serif;padding:6mm 0;">
-              <table width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td width="63%" style="vertical-align:middle;padding-right:10mm;">' . $img_html . '</td>
-                <td width="37%" style="vertical-align:top;padding-left:6mm;border-left:0.5pt solid #C49A3C;">
-
-                  <p style="font-size:7pt;color:#C49A3C;font-family:Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;margin-bottom:5mm;">
-                    Planche ' . sprintf( '%02d', $i + 1 ) . ' &nbsp;—&nbsp; ' . esc_html( $ref ) . '
-                  </p>
-
-                  <h2 style="font-size:13pt;font-weight:normal;color:#0E2340;margin-bottom:3mm;line-height:1.3;">
-                    ' . esc_html( $item['titre_catalogue'] ?: ( 'Planche ' . ( $i + 1 ) ) ) . '
-                  </h2>
-
-                  <p style="font-size:9pt;color:#555;font-family:Arial,sans-serif;margin-bottom:5mm;font-style:italic;">
-                    ' . esc_html( $nom_candidat ) . '
-                  </p>
-
-                  ' . ( $item['biographie'] ? '
-                  <p style="font-size:8.5pt;color:#333;line-height:1.65;margin-bottom:5mm;">
-                    ' . nl2br( esc_html( stripslashes( $item['biographie'] ) ) ) . '
-                  </p>' : '' ) . '
-
-                  ' . ( $item['tirage'] ? '
-                  <p style="font-size:8pt;color:#666;font-family:Arial,sans-serif;margin-bottom:3mm;">
-                    <span style="color:#aaa;font-size:7pt;text-transform:uppercase;letter-spacing:1px;">Tirage</span><br>
-                    ' . esc_html( stripslashes( $item['tirage'] ) ) . '
-                  </p>' : '' ) . '
-
-                  <p style="font-size:7pt;color:#bbb;font-family:Arial,sans-serif;margin-top:6mm;">
-                    ' . esc_html( $dims ) . ' &nbsp;—&nbsp; ' . esc_html( $orient ) . '
-                  </p>
-
-                </td>
-              </tr></table>
-            </div>' );
         }
 
         return $mpdf->Output( '', 'S' );
@@ -327,8 +396,13 @@ class PC_Catalogue {
 
     public function ajax_get(): void {
         check_ajax_referer( 'pc_catalogue_get_nonce', 'nonce' );
-        if ( ! current_user_can( 'pc_view_catalogue_panel' ) ) wp_send_json_error( [ 'message' => __( 'Accès refusé.', 'photo-contest' ) ] );
-        wp_send_json_success( [ 'items' => $this->get_items() ] );
+        if ( ! current_user_can( 'pc_view_catalogue_panel' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Accès refusé.', PC_TEXT_DOMAIN ) ] );
+        }
+        wp_send_json_success( [
+            'items'      => $this->get_items(), // backward compat, flat
+            'categories' => $this->get_items_grouped_by_category( false ),
+        ] );
     }
 
     public function ajax_save_fiche(): void {

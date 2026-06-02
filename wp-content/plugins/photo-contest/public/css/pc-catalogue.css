@@ -624,3 +624,17 @@
   .pcc-panel { display: none; }
   .pcc-grid  { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
+
+/* ── Category badge ─────────────────────────────────────────────────── */
+.pc-cat-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(196, 154, 60, 0.15);
+  color: #c49a3c;
+  border-radius: 3px;
+  margin-left: 6px;
+}

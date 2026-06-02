@@ -10,6 +10,8 @@ defined( 'ABSPATH' ) || exit;
  *  - pc_jury_votes      : décisions du jury par photo
  *  - pc_payments        : participations financières
  *  - pc_catalogue_items : métadonnées catalogue par photo retenue
+ *  - pc_email_tokens    : tokens de vérification email
+ *  - pc_categories      : catégories de concours
  */
 class PC_Database {
 
@@ -149,6 +151,18 @@ class PC_Database {
             updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY photo_id (photo_id)
+        ) {$charset};" );
+
+        // ── Catégories ─────────────────────────────────────────────────────
+        $table_categories = self::table( self::TABLE_CATEGORIES );
+        dbDelta( "CREATE TABLE {$table_categories} (
+            id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            nom           VARCHAR(150)    NOT NULL,
+            actif         TINYINT(1)      NOT NULL DEFAULT 1,
+            created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_actif (actif)
         ) {$charset};" );
 
         // Mise à jour de la version en base

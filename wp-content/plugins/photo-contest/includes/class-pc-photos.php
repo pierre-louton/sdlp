@@ -165,32 +165,51 @@ class PC_Photos {
     // ──────────────────────────────────────────────────────────────────────
 
     /**
-     * Traite un upload de photo.
+     * Dépôt d'une photo par un candidat dans une catégorie donnée.
      *
      * @param int   $user_id
-     * @param array $file    Entrée de $_FILES
-     * @return array{success: bool, message: string, photo_id?: int}
+     * @param array $file        Entrée de $_FILES
+     * @param int   $category_id ID de la catégorie cible (obligatoire, > 0)
+     * @return array{success: bool, message: string, photo_id?: int, category_id?: int}
      */
-    public function upload_photo( int $user_id, array $file ): array {
+    public function upload_photo( int $user_id, array $file, int $category_id ): array {
         // 1. Dépôt ouvert ?
         if ( ! PC_Settings::is_depot_actif() ) {
             return [ 'success' => false, 'message' => __( 'Le dépôt de photos est actuellement fermé.', PC_TEXT_DOMAIN ) ];
         }
 
-        // 2. Quota atteint ?
-        $quota   = (int) PC_Settings::get( 'quota_photos', 5 );
-        $nb_photos = $this->count_user_photos( $user_id );
-        if ( $nb_photos >= $quota ) {
+        // 2. Catégorie valide et active ?
+        if ( $category_id <= 0 ) {
+            return [ 'success' => false, 'message' => __( 'Catégorie manquante.', PC_TEXT_DOMAIN ) ];
+        }
+        $category = PC_Categories::get( $category_id );
+        if ( ! $category ) {
+            return [ 'success' => false, 'message' => __( 'Catégorie introuvable.', PC_TEXT_DOMAIN ) ];
+        }
+        if ( (int) $category['actif'] !== 1 ) {
+            return [ 'success' => false, 'message' => __( 'Cette catégorie n\'est plus active.', PC_TEXT_DOMAIN ) ];
+        }
+
+        // 3. Quota par catégorie atteint ?
+        global $wpdb;
+        $table_photos = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $quota        = (int) PC_Settings::get( 'quota_photos', 5 );
+        $nb_in_cat    = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table_photos} WHERE user_id = %d AND category_id = %d",
+            $user_id, $category_id
+        ) );
+        if ( $nb_in_cat >= $quota ) {
             return [
                 'success' => false,
                 'message' => sprintf(
-                    __( 'Vous avez atteint le quota de %d photo(s) maximum.', PC_TEXT_DOMAIN ),
-                    $quota
+                    /* translators: %1$d quota, %2$s nom catégorie */
+                    __( 'Quota atteint (%1$d) pour la catégorie « %2$s ».', PC_TEXT_DOMAIN ),
+                    $quota, $category['nom']
                 ),
             ];
         }
 
-        // 3. Type MIME : JPG uniquement
+        // 4. Type MIME : JPG uniquement
         $finfo    = finfo_open( FILEINFO_MIME_TYPE );
         $mime     = finfo_file( $finfo, $file['tmp_name'] );
         finfo_close( $finfo );
@@ -242,10 +261,9 @@ class PC_Photos {
         $titre = $this->extract_titre_from_exif( $chemin_dest, $nom_fichier );
 
         // 8. Insertion en BDD
-        global $wpdb;
-        $table = PC_Database::table( PC_Database::TABLE_PHOTOS );
-        $wpdb->insert( $table, [
+        $wpdb->insert( $table_photos, [
             'user_id'         => $user_id,
+            'category_id'     => $category_id,
             'titre'           => $titre,
             'nom_fichier'     => $nom_fichier,
             'chemin_fichier'  => $chemin_dest,
@@ -254,15 +272,16 @@ class PC_Photos {
             'hauteur_px'      => $hauteur,
             'ratio_type'      => $ratio_type,
             'statut'          => 'en_attente',
-            'ordre_affichage' => $nb_photos + 1,
+            'ordre_affichage' => $nb_in_cat + 1,
         ] );
 
         $photo_id = (int) $wpdb->insert_id;
 
         return [
-            'success'  => true,
-            'message'  => __( 'Photo déposée avec succès.', PC_TEXT_DOMAIN ),
-            'photo_id' => $photo_id,
+            'success'     => true,
+            'message'     => __( 'Photo déposée avec succès.', PC_TEXT_DOMAIN ),
+            'photo_id'    => $photo_id,
+            'category_id' => $category_id,
         ];
     }
 
@@ -497,7 +516,9 @@ class PC_Photos {
             wp_send_json_error( [ 'message' => __( 'Aucun fichier reçu.', PC_TEXT_DOMAIN ) ] );
         }
 
-        $result = $this->upload_photo( get_current_user_id(), $_FILES['photo'] );
+        $category_id = isset( $_POST['category_id'] ) ? absint( $_POST['category_id'] ) : 0;
+
+        $result = $this->upload_photo( get_current_user_id(), $_FILES['photo'], $category_id );
 
         if ( $result['success'] ) {
             wp_send_json_success( $result );

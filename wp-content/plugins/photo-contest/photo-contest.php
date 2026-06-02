@@ -76,6 +76,8 @@ function pc_load_plugin(): void {
     if ( is_admin() ) {
         require_once PC_PLUGIN_DIR . 'admin/class-pc-admin.php';
         PC_Admin::get_instance();
+        require_once PC_PLUGIN_DIR . 'admin/class-pc-categories-admin.php';
+        PC_Categories_Admin::get_instance();
     }
 
     // Initialisation des singletons

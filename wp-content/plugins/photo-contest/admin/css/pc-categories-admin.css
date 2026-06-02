@@ -1,0 +1,5 @@
+.pc-categories-admin .pc-cat-nom { width: 260px; }
+.pc-categories-admin .pc-cat-toggle { min-width: 80px; }
+.pc-categories-admin .description { color: #888; font-size: 12px; }
+#pc-cat-msg.pc-msg-success { color: #2c7a3b; font-weight: 500; }
+#pc-cat-msg.pc-msg-error   { color: #b03030; font-weight: 500; }

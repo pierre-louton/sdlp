@@ -165,8 +165,35 @@ class PC_Database {
             KEY actif (actif)
         ) {$charset};" );
 
+        // Migrations structurelles idempotentes
+        self::add_category_column_to_photos();
+
         // Mise à jour de la version en base
         update_option( 'pc_db_version', PC_VERSION );
+    }
+
+    /**
+     * Add category_id column to wp_pc_photos.
+     * Idempotent: checks information_schema before issuing ALTER.
+     */
+    private static function add_category_column_to_photos(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $col_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = %s
+               AND column_name = 'category_id'",
+            $table
+        ) );
+
+        if ( ! $col_exists ) {
+            $wpdb->query( "ALTER TABLE {$table}
+                ADD COLUMN category_id BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER user_id,
+                ADD KEY category_id (category_id),
+                ADD KEY user_category (user_id, category_id)" );
+        }
     }
 
     /**

@@ -167,9 +167,53 @@ class PC_Database {
 
         // Migrations structurelles idempotentes
         self::add_category_column_to_photos();
+        self::seed_default_category();
+        self::migrate_legacy_photos_to_default_category();
 
         // Mise à jour de la version en base
         update_option( 'pc_db_version', PC_VERSION );
+    }
+
+    /**
+     * Insère la catégorie par défaut « Photo Club Pavillonnais » si la table est vide.
+     * Idempotent : retourne l'ID de la première catégorie si existante.
+     *
+     * @return int ID de la catégorie par défaut (ou de la première si plusieurs existent déjà).
+     */
+    private static function seed_default_category(): int {
+        global $wpdb;
+        $table = self::table( self::TABLE_CATEGORIES );
+
+        $existing = (int) $wpdb->get_var( "SELECT id FROM {$table} ORDER BY id ASC LIMIT 1" );
+        if ( $existing > 0 ) {
+            return $existing;
+        }
+
+        $wpdb->insert( $table, [
+            'nom'   => 'Photo Club Pavillonnais',
+            'actif' => 1,
+        ] );
+        return (int) $wpdb->insert_id;
+    }
+
+    /**
+     * Affecte la catégorie par défaut à toutes les photos avec category_id = 0.
+     * Idempotent : ne fait rien si aucune photo n'est orpheline.
+     */
+    private static function migrate_legacy_photos_to_default_category(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $orphans = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE category_id = 0" );
+        if ( $orphans === 0 ) {
+            return;
+        }
+
+        $default_id = self::seed_default_category();
+        $wpdb->query( $wpdb->prepare(
+            "UPDATE {$table} SET category_id = %d WHERE category_id = 0",
+            $default_id
+        ) );
     }
 
     /**

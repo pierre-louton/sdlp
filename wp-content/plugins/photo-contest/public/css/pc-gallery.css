@@ -964,3 +964,83 @@
   color: var(--pc-accent, #c49a3c);
   border-color: var(--pc-accent, #c49a3c);
 }
+
+/* ── Sections par catégorie (Phase 1) ────────────────────────────────── */
+.pc-gallery-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.pc-gallery-section {
+  padding-bottom: 24px;
+  border-bottom: 1px solid #2a2b2e;
+}
+.pc-gallery-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.pc-gallery-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pc-gallery-section__title {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #c49a3c;
+  margin: 0;
+}
+
+.pc-gallery-section__count {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888480;
+}
+
+.pc-gallery-section__grid {
+  /* hérite des styles .pc-grid existants (déjà défini ailleurs dans ce fichier) */
+  margin-bottom: 16px;
+}
+
+/* Bouton "+ Ajouter une photo" par section */
+.pc-add-btn {
+  background: #c49a3c;
+  color: #0e0f10;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+.pc-add-btn:hover {
+  opacity: .85;
+}
+
+.pc-add-disabled {
+  color: #888480;
+  font-style: italic;
+  font-size: 13px;
+  margin: 0;
+}
+
+.pc-gallery-loading {
+  color: #888480;
+  text-align: center;
+  padding: 40px;
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+}

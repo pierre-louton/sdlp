@@ -105,7 +105,7 @@ JS;
         $fields_texte = [
             'nom_concours'              => __( 'Nom du concours', PC_TEXT_DOMAIN ),
             'edition'                   => __( 'Édition', PC_TEXT_DOMAIN ),
-            'quota_photos'              => __( 'Quota photos / candidat', PC_TEXT_DOMAIN ),
+            'quota_photos'              => __( 'Quota max photos par catégorie (par candidat)', PC_TEXT_DOMAIN ),
             'montant_participation_cts' => __( 'Montant participation (centimes)', PC_TEXT_DOMAIN ),
             'devise'                    => __( 'Devise (ex: EUR)', PC_TEXT_DOMAIN ),
             'stripe_publishable_key'    => __( 'Stripe — Clé publique (pk_...)', PC_TEXT_DOMAIN ),

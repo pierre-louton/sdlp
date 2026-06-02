@@ -25,7 +25,7 @@ class PC_Settings {
         'date_annonce_resultats'    => '',
 
         // Photos
-        'quota_photos'              => 5,          // nombre max par candidat
+        'quota_photos'              => 5,          // nombre max par catégorie (et par candidat)
         'poids_max_mo'              => 20,         // en mégaoctets
         'ratio_autorises'           => ['3_2', '2_3'],
 

@@ -20,6 +20,7 @@ class PC_Database {
     const TABLE_PAYMENTS   = 'pc_payments';
     const TABLE_CATALOGUE  = 'pc_catalogue_items';
     const TABLE_EMAIL_TOKENS = 'pc_email_tokens';
+    const TABLE_CATEGORIES = 'pc_categories';
 
     /**
      * Retourne le nom complet d'une table (avec préfixe wpdb).

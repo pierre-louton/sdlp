@@ -89,7 +89,7 @@ class PC_Catalogue {
         $groups = [];
         foreach ( $items as $item ) {
             $cid  = (int) ( $item['category_id'] ?? 0 );
-            $cnom = $item['nom_categorie'] ?? __( 'Non classées', PC_TEXT_DOMAIN );
+            $cnom = ! empty( $item['nom_categorie'] ) ? $item['nom_categorie'] : __( 'Sans catégorie', PC_TEXT_DOMAIN );
             if ( ! isset( $groups[ $cid ] ) ) {
                 $groups[ $cid ] = [
                     'id'    => $cid,
@@ -176,21 +176,25 @@ class PC_Catalogue {
     public function export_json(): string {
         $groups = $this->get_items_grouped_by_category( true );
 
-        $categories_json = array_map( function ( $group ) {
-            $planches = array_map( fn( $item, $i ) => [
-                'numero'     => $i + 1,
-                'reference'  => '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT ),
-                'titre'      => $item['titre_catalogue'] ?: null,
-                'biographie' => $item['biographie'] ?: null,
-                'tirage'     => $item['tirage'] ?: null,
-                'image'      => [
-                    'largeur' => (int) $item['largeur_px'],
-                    'hauteur' => (int) $item['hauteur_px'],
-                    'ratio'   => $item['ratio_type'],
-                    'fichier' => basename( $item['nom_fichier'] ),
-                ],
-                'paiement' => $item['statut_paiement'],
-            ], $group['items'], array_keys( $group['items'] ) );
+        $numero_global = 0;
+        $categories_json = array_map( function ( $group ) use ( &$numero_global ) {
+            $planches = array_map( function ( $item ) use ( &$numero_global ) {
+                $numero_global++;
+                return [
+                    'numero'     => $numero_global,
+                    'reference'  => '#' . str_pad( $item['photo_id'], 5, '0', STR_PAD_LEFT ),
+                    'titre'      => $item['titre_catalogue'] ?: null,
+                    'biographie' => $item['biographie'] ?: null,
+                    'tirage'     => $item['tirage'] ?: null,
+                    'image'      => [
+                        'largeur' => (int) $item['largeur_px'],
+                        'hauteur' => (int) $item['hauteur_px'],
+                        'ratio'   => $item['ratio_type'],
+                        'fichier' => basename( $item['nom_fichier'] ),
+                    ],
+                    'paiement' => $item['statut_paiement'],
+                ];
+            }, $group['items'] );
             return [
                 'id'          => $group['id'],
                 'nom'         => $group['nom'],

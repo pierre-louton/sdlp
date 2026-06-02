@@ -102,8 +102,10 @@ if ( ! $nom_complet ) {
         </div>
       <?php endif; ?>
 
-      <!-- Grille — remplie par JavaScript -->
-      <div class="pc-grid" id="pc-photo-grid"></div>
+      <!-- Sections par catégorie — remplies par pc-gallery.js -->
+      <div class="pc-gallery-sections" id="pc-gallery-sections">
+        <p class="pc-gallery-loading"><?php esc_html_e( 'Chargement…', PC_TEXT_DOMAIN ); ?></p>
+      </div>
 
     </main>
   </div>

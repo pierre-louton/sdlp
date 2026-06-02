@@ -1,0 +1,270 @@
+/* =====================================================================
+   SDLP — Page de connexion custom
+   Centré, sobre, même palette laboratoire sombre que les autres écrans
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg:      #0e0f10;
+  --pan:     #161718;
+  --card:    #1c1d1f;
+  --bdr:     #2a2b2e;
+  --bdr-l:   #3a3b3e;
+  --txt:     #e8e6e1;
+  --txt-s:   #b0ada8;
+  --txt-m:   #888480;
+  --mono: 'DM Mono', monospace;
+  --ui:   'DM Sans', sans-serif;
+  --serif:'Instrument Serif', serif;
+  --gold:    #c49a3c;
+  --red:     #b05050;
+  --red-bg:  #250e0e;
+}
+
+/* Reset minimal */
+.pc-login-wrap *,
+.pc-login-wrap *::before,
+.pc-login-wrap *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Fond pleine page ───────────────────────────────────────────────── */
+.pc-login-wrap {
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  font-family: var(--ui);
+  color: var(--txt);
+}
+
+/* ── Carte centrale ─────────────────────────────────────────────────── */
+.pcl-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--pan);
+  border: 1px solid var(--bdr);
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 36px 32px 28px;
+}
+
+/* ── En-tête logo / nom ─────────────────────────────────────────────── */
+.pcl-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.pcl-logo {
+  max-height: 56px;
+  max-width: 200px;
+  width: auto;
+  display: block;
+  margin: 0 auto 12px;
+  /* Logo PNG transparent sur fond sombre — on le filtre en blanc si nécessaire */
+  filter: brightness(0) invert(1);
+  opacity: .92;
+}
+
+/* Désactiver le filtre si le logo est déjà en couleur claire */
+.pcl-logo.couleur {
+  filter: none;
+  opacity: 1;
+}
+
+.pcl-nom {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--txt);
+  letter-spacing: .01em;
+}
+
+.pcl-baseline {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--txt-m);
+  margin-top: 6px;
+}
+
+/* ── Erreur ─────────────────────────────────────────────────────────── */
+.pcl-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--red-bg);
+  border: 1px solid #4a1b1b;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  margin-bottom: 18px;
+  letter-spacing: .02em;
+}
+
+.pcl-error__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+}
+
+/* ── Onglets ────────────────────────────────────────────────────────── */
+.pcl-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--bdr);
+  margin-bottom: 20px;
+  gap: 0;
+}
+
+.pcl-tab {
+  flex: 1;
+  height: 38px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--txt-m);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  margin-bottom: -1px;
+}
+
+.pcl-tab:hover { color: var(--txt-s); }
+.pcl-tab.actif { color: var(--gold); border-bottom-color: var(--gold); }
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.pcl-panel { display: none; }
+.pcl-panel.actif { display: block; }
+
+/* ── Message succès ─────────────────────────────────────────────────── */
+.pcl-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0a2518;
+  border: 1px solid #1a4530;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #4da876;
+  margin-bottom: 18px;
+  letter-spacing: .02em;
+}
+
+.pcl-success__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4da876;
+  flex-shrink: 0;
+}
+
+/* ── Mention bas de formulaire ──────────────────────────────────────── */
+.pcl-mention {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+  text-align: center;
+  line-height: 1.6;
+}
+.pcl-form { display: flex; flex-direction: column; gap: 16px; }
+
+.pcl-field { display: flex; flex-direction: column; gap: 6px; }
+
+.pcl-field__lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--txt-m);
+}
+
+.pcl-field__input {
+  width: 100%;
+  height: 44px;
+  background: var(--card);
+  border: 1px solid var(--bdr-l);
+  border-radius: 7px;
+  color: var(--txt);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 0 14px;
+  transition: border-color .15s;
+  outline: none;
+}
+
+.pcl-field__input:focus { border-color: var(--gold); }
+.pcl-field__input::placeholder { color: var(--txt-m); }
+
+/* Rester connecté */
+.pcl-remember {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--txt-s);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pcl-remember input[type="checkbox"] {
+  accent-color: var(--gold);
+  width: 14px;
+  height: 14px;
+}
+
+/* Bouton connexion */
+.pcl-submit {
+  width: 100%;
+  height: 48px;
+  margin-top: 4px;
+  background: var(--gold);
+  color: #0e0f10;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+
+.pcl-submit:hover  { background: #d4aa4c; }
+.pcl-submit:active { transform: scale(.99); }
+
+/* ── Footer lien ────────────────────────────────────────────────────── */
+.pcl-footer {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.pcl-link {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+  text-decoration: none;
+  letter-spacing: .03em;
+  transition: color .15s;
+}
+
+.pcl-link:hover { color: var(--txt-s); }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .pcl-card { padding: 28px 20px 22px; border-radius: 10px; }
+}

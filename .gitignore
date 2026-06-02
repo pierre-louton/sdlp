@@ -1,0 +1,25 @@
+# WordPress runtime
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/backup-*/
+wp-content/wflogs/
+
+# Local config
+wp-config.php
+.htaccess
+
+# Plugin temp scripts (utilities)
+_pc_*.php
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Debug logs
+debug.log
+wp-content/debug.log

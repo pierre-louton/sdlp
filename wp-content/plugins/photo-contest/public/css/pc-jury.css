@@ -1,0 +1,628 @@
+/* =====================================================================
+   Photo Contest — Interface Jury
+   Même système de design que la galerie (laboratoire sombre)
+   Densité maximale : outil de travail, pas de présentation
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── Variables ─────────────────────────────────────────────────────── */
+:root {
+  --pc-bg-base:       #0e0f10;
+  --pc-bg-panel:      #161718;
+  --pc-bg-card:       #1c1d1f;
+  --pc-bg-hover:      #222325;
+  --pc-border:        #2a2b2e;
+  --pc-border-l:      #3a3b3e;
+
+  --pc-text:          #e8e6e1;
+  --pc-text-s:        #b0ada8;   /* relevé de #8a8880 — lisible sur fond sombre */
+  --pc-text-m:        #888480;   /* relevé de #555450 — lisible sur fond sombre */
+
+  --pc-mono:    'DM Mono', monospace;
+  --pc-ui:      'DM Sans', sans-serif;
+  --pc-serif:   'Instrument Serif', serif;
+
+  --pc-retenu:        #4da876;
+  --pc-retenu-bg:     #0a2518;
+  --pc-refuse:        #b05050;
+  --pc-refuse-bg:     #250e0e;
+  --pc-neutre:        #c49a3c;
+  --pc-neutre-bg:     #2a1f08;
+
+  --pc-radius:  8px;
+  --pc-panel-w: 320px;
+  --pc-topbar-h: 48px;
+  --pc-strip-h:  40px;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────── */
+.pc-jury-wrap *,
+.pc-jury-wrap *::before,
+.pc-jury-wrap *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Wrapper ───────────────────────────────────────────────────────── */
+.pc-jury-wrap {
+  background: var(--pc-bg-base);
+  color: var(--pc-text);
+  font-family: var(--pc-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Topbar ────────────────────────────────────────────────────────── */
+.pcj-topbar {
+  height: var(--pc-topbar-h);
+  background: var(--pc-bg-panel);
+  border-bottom: 1px solid var(--pc-border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.pcj-topbar__logo {
+  font-family: var(--pc-serif);
+  font-style: italic;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.pcj-topbar__role {
+  font-family: var(--pc-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pc-neutre);
+  background: var(--pc-neutre-bg);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* Nom du juré dans la topbar */
+.pcj-topbar__juré {
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pc-text);
+  letter-spacing: .02em;
+  margin-left: 8px;
+}
+
+.pcj-topbar__sep {
+  width: 1px;
+  height: 18px;
+  background: var(--pc-border-l);
+}
+
+/* Compteur de délibérations */
+.pcj-counter {
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  color: var(--pc-text-s);
+}
+
+.pcj-counter strong {
+  color: var(--pc-text);
+  font-weight: 500;
+}
+
+/* Barre de progression collective */
+.pcj-progress-global {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pcj-progress-bar-wrap {
+  width: 120px;
+  height: 4px;
+  background: var(--pc-border-l);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pcj-progress-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .5s ease;
+  background: linear-gradient(90deg, var(--pc-retenu) 0%, #7ecfa0 100%);
+}
+
+.pcj-progress-pct {
+  font-family: var(--pc-mono);
+  font-size: 10px;
+  color: var(--pc-text-s);
+  white-space: nowrap;
+  min-width: 36px;
+}
+
+/* Indicateur clavier */
+.pcj-kbd-hint {
+  font-family: var(--pc-mono);
+  font-size: 10px;
+  color: var(--pc-text-s);  /* relevé */
+  white-space: nowrap;
+}
+
+.pcj-kbd-hint kbd {
+  background: var(--pc-bg-card);
+  border: 1px solid var(--pc-border-l);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--pc-text);  /* texte blanc sur touche */
+  font-weight: 500;
+  color: var(--pc-text-s);
+  font-family: var(--pc-mono);
+  font-size: 9px;
+}
+
+/* ── Bande de navigation photos ────────────────────────────────────── */
+.pcj-strip {
+  height: var(--pc-strip-h);
+  background: var(--pc-bg-panel);
+  border-bottom: 1px solid var(--pc-border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+
+.pcj-strip::-webkit-scrollbar { display: none; }
+
+.pcj-thumb {
+  width: 44px;
+  height: 30px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color .15s, opacity .15s;
+  opacity: .55;
+  position: relative;
+}
+
+.pcj-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.pcj-thumb:hover { opacity: .85; }
+
+.pcj-thumb.actif {
+  border-color: var(--pc-neutre);
+  opacity: 1;
+}
+
+.pcj-thumb.vote-retenu { border-color: var(--pc-retenu); opacity: 1; }
+.pcj-thumb.vote-refuse  { border-color: var(--pc-refuse);  opacity: 1; }
+
+/* Point de vote sur miniature */
+.pcj-thumb__dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* ── Corps principal ───────────────────────────────────────────────── */
+.pcj-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - var(--pc-topbar-h) - var(--pc-strip-h));
+}
+
+/* ── Zone photo principale ─────────────────────────────────────────── */
+.pcj-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  background: var(--pc-bg-base);
+}
+
+/* Numéro photo centré sur fond (watermark déco) */
+.pcj-viewer__num {
+  position: absolute;
+  font-family: var(--pc-serif);
+  font-style: italic;
+  font-size: 160px;
+  color: rgba(255,255,255,.025);
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  line-height: 1;
+}
+
+.pcj-img-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pcj-img {
+  max-width: 100%;
+  max-height: calc(100vh - var(--pc-topbar-h) - var(--pc-strip-h) - 48px);
+  object-fit: contain;
+  border-radius: 2px;
+  display: block;
+  transition: opacity .3s;
+}
+
+.pcj-img.chargement { opacity: 0; }
+
+/* Flèches navigation latérales */
+.pcj-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 36px;
+  height: 64px;
+  background: rgba(22,23,24,.85);
+  border: 1px solid var(--pc-border-l);
+  border-radius: var(--pc-radius);
+  color: var(--pc-text-s);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+}
+
+.pcj-nav-btn:hover {
+  background: var(--pc-bg-card);
+  color: var(--pc-text);
+}
+
+.pcj-nav-btn--prev { left: 8px; }
+.pcj-nav-btn--next { right: 8px; }
+.pcj-nav-btn:disabled { opacity: .2; cursor: not-allowed; }
+
+/* Overlay vote (flash coloré quand on vote) */
+.pcj-vote-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .05s;
+  border-radius: 2px;
+}
+
+.pcj-vote-flash.retenu { background: rgba(77,168,118,.12); }
+.pcj-vote-flash.refuse { background: rgba(176,80,80,.12); }
+.pcj-vote-flash.actif  { opacity: 1; }
+
+/* ── Panneau de vote latéral ───────────────────────────────────────── */
+.pcj-panel {
+  width: var(--pc-panel-w);
+  background: var(--pc-bg-panel);
+  border-left: 1px solid var(--pc-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.pcj-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--pc-border);
+}
+
+.pcj-section__label {
+  font-family: var(--pc-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pc-neutre);  /* or SDLP au lieu de gris */
+  margin-bottom: 12px;
+}
+
+/* Métadonnées photo (anonymisées) */
+.pcj-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.pcj-meta-row .key {
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  color: var(--pc-text-s);  /* relevé */
+  letter-spacing: .03em;
+}
+
+.pcj-meta-row .val {
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  color: var(--pc-text-s);
+}
+
+/* Boutons vote */
+.pcj-vote-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pcj-vote-btn {
+  height: 52px;
+  border: 1.5px solid transparent;
+  border-radius: var(--pc-radius);
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+
+.pcj-vote-btn:active { transform: scale(.97); }
+
+.pcj-vote-btn--retenu {
+  background: var(--pc-retenu-bg);
+  border-color: #1a4530;
+  color: var(--pc-retenu);
+}
+
+.pcj-vote-btn--retenu:hover,
+.pcj-vote-btn--retenu.actif {
+  background: #113320;
+  border-color: var(--pc-retenu);
+}
+
+.pcj-vote-btn--refuse {
+  background: var(--pc-refuse-bg);
+  border-color: #4a1b1b;
+  color: var(--pc-refuse);
+}
+
+.pcj-vote-btn--refuse:hover,
+.pcj-vote-btn--refuse.actif {
+  background: #3a1010;
+  border-color: var(--pc-refuse);
+}
+
+.pcj-vote-btn__kbd {
+  font-size: 9px;
+  opacity: .5;
+}
+
+/* Bouton passer sans voter */
+.pcj-btn-passer {
+  width: 100%;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--pc-border-l);
+  border-radius: 5px;
+  color: var(--pc-text-m);
+  font-family: var(--pc-mono);
+  font-size: 10px;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+.pcj-btn-passer:hover {
+  border-color: var(--pc-text-m);
+  color: var(--pc-text-s);
+}
+
+/* Zone commentaire */
+.pcj-comment {
+  width: 100%;
+  min-height: 80px;
+  max-height: 140px;
+  resize: vertical;
+  background: var(--pc-bg-card);
+  border: 1px solid var(--pc-border-l);
+  border-radius: 5px;
+  color: var(--pc-text);
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  transition: border-color .15s;
+  margin-top: 8px;
+}
+
+.pcj-comment:focus {
+  outline: none;
+  border-color: var(--pc-neutre);
+}
+
+.pcj-comment::placeholder { color: var(--pc-text-m); }
+
+/* Vote enregistré — confirmation */
+.pcj-vote-confirme {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+.pcj-vote-confirme.visible { display: flex; }
+.pcj-vote-confirme.retenu  { background: var(--pc-retenu-bg); color: var(--pc-retenu); }
+.pcj-vote-confirme.refuse  { background: var(--pc-refuse-bg); color: var(--pc-refuse); }
+
+.pcj-vote-confirme__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Bouton modifier vote */
+.pcj-btn-modifier {
+  background: none;
+  border: none;
+  color: var(--pc-text-m);
+  font-family: var(--pc-mono);
+  font-size: 10px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-left: auto;
+}
+
+.pcj-btn-modifier:hover { color: var(--pc-text-s); }
+
+/* ── Stats jury (bas du panneau) ───────────────────────────────────── */
+.pcj-stats {
+  padding: 16px 18px;
+  margin-top: auto;
+  border-top: 1px solid var(--pc-border);
+}
+
+.pcj-stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.pcj-stats__row .lbl {
+  font-family: var(--pc-mono);
+  font-size: 10px;
+  color: var(--pc-text-m);
+}
+
+.pcj-stats__row .val {
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pcj-stat-mini-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 3px;
+  transition: width .4s;
+}
+
+/* ── Toasts ────────────────────────────────────────────────────────── */
+.pcj-toast-container {
+  position: fixed;
+  top: calc(var(--pc-topbar-h) + 12px);
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.pcj-toast {
+  background: var(--pc-bg-panel);
+  border: 1px solid var(--pc-border-l);
+  border-radius: var(--pc-radius);
+  padding: 10px 14px;
+  font-family: var(--pc-mono);
+  font-size: 11px;
+  color: var(--pc-text);
+  max-width: 280px;
+  animation: pcj-tin .2s ease forwards;
+}
+
+.pcj-toast--retenu  { border-left: 3px solid var(--pc-retenu); }
+.pcj-toast--refuse  { border-left: 3px solid var(--pc-refuse); }
+.pcj-toast--info    { border-left: 3px solid var(--pc-neutre); }
+.pcj-toast--sortie  { animation: pcj-tout .18s ease forwards; }
+
+@keyframes pcj-tin  { from { opacity:0; transform:translateX(10px); } to { opacity:1; transform:none; } }
+@keyframes pcj-tout { from { opacity:1; } to { opacity:0; transform:translateX(10px); } }
+
+/* ── Écran vide / fin de session ───────────────────────────────────── */
+.pcj-fin {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  padding: 40px;
+}
+
+.pcj-fin__titre {
+  font-family: var(--pc-serif);
+  font-style: italic;
+  font-size: 28px;
+  color: var(--pc-text);  /* blanc au lieu de gris */
+}
+
+.pcj-fin__sub {
+  font-family: var(--pc-mono);
+  font-size: 12px;
+  color: var(--pc-text-s);  /* relevé */
+  max-width: 320px;
+  line-height: 1.8;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .pcj-body { flex-direction: column; }
+
+  .pcj-viewer {
+    height: 50vh;
+    padding: 12px;
+  }
+
+  .pcj-panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--pc-border);
+    overflow-y: visible;
+  }
+
+  .pcj-stats { display: none; }
+}

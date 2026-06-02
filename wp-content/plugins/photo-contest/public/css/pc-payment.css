@@ -1,0 +1,400 @@
+/* =====================================================================
+   Photo Contest — Interface Paiement
+   Même système de design (laboratoire sombre) mais plus épuré :
+   page unique, centre de gravité unique, friction minimale.
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg:       #0e0f10;
+  --pan:      #161718;
+  --card:     #1c1d1f;
+  --bdr:      #2a2b2e;
+  --bdr-l:    #3a3b3e;
+  --txt:      #e8e6e1;
+  --txt-s:    #b0ada8;
+  --txt-m:    #888480;
+  --mono: 'DM Mono', monospace;
+  --ui:   'DM Sans', sans-serif;
+  --serif:'Instrument Serif', serif;
+  --gold:     #c49a3c;
+  --gold-bg:  #2a1f08;
+  --green:    #4da876;
+  --green-bg: #0a2518;
+  --red:      #b05050;
+  --red-bg:   #250e0e;
+  --purple:   #9a6ec4;
+}
+
+.pc-pay-wrap *,
+.pc-pay-wrap *::before,
+.pc-pay-wrap *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Wrapper page ───────────────────────────────────────────────────── */
+.pc-pay-wrap {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px 20px 60px;
+}
+
+/* ── En-tête concours ───────────────────────────────────────────────── */
+.pcp-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.pcp-logo {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--txt-s);
+}
+
+.pcp-logo span {
+  color: var(--gold);
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── Carte principale ───────────────────────────────────────────────── */
+.pcp-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--pan);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Bloc photo retenue */
+.pcp-photo-bloc {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--bdr);
+}
+
+.pcp-photo-vignette {
+  width: 120px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--card);
+}
+
+.pcp-photo-vignette img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pcp-photo-info {
+  padding: 18px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pcp-badge-retenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: var(--green-bg);
+  padding: 3px 8px;
+  border-radius: 3px;
+  width: fit-content;
+}
+
+.pcp-badge-retenu::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.pcp-photo-ref {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+  letter-spacing: .03em;
+}
+
+.pcp-photo-titre {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 16px;
+  color: var(--txt);
+  line-height: 1.3;
+}
+
+.pcp-photo-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+}
+
+/* Bloc récapitulatif montant */
+.pcp-recapitulatif {
+  padding: 20px;
+  border-bottom: 1px solid var(--bdr);
+}
+
+.pcp-recap-titre {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--txt-m);
+  margin-bottom: 14px;
+}
+
+.pcp-ligne {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.pcp-ligne .lbl { color: var(--txt-s); }
+.pcp-ligne .val { font-family: var(--mono); font-size: 12px; color: var(--txt-s); }
+
+.pcp-total-ligne {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--bdr);
+}
+
+.pcp-total-ligne .lbl {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--txt);
+}
+
+.pcp-total-ligne .montant {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--gold);
+  letter-spacing: -.01em;
+}
+
+/* Bloc CTA */
+.pcp-cta {
+  padding: 20px;
+}
+
+/* Mode test badge */
+.pcp-mode-test {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gold-bg);
+  border: 1px solid #4a3510;
+  border-radius: 6px;
+  padding: 9px 12px;
+  margin-bottom: 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: .02em;
+}
+
+.pcp-mode-test::before {
+  content: '⚠';
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Bouton Stripe */
+.pcp-btn-stripe {
+  width: 100%;
+  height: 52px;
+  background: var(--gold);
+  color: #0e0f10;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.pcp-btn-stripe:hover { background: #d4aa4c; }
+.pcp-btn-stripe:active { transform: scale(.99); }
+.pcp-btn-stripe:disabled { opacity: .4; cursor: not-allowed; }
+
+.pcp-btn-stripe__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0,0,0,.2);
+  border-top-color: #0e0f10;
+  border-radius: 50%;
+  animation: pcp-spin .6s linear infinite;
+  display: none;
+}
+
+.pcp-btn-stripe.chargement .pcp-btn-stripe__spinner { display: block; }
+.pcp-btn-stripe.chargement .pcp-btn-stripe__txt { opacity: .6; }
+
+@keyframes pcp-spin { to { transform: rotate(360deg); } }
+
+/* Logos Stripe + sécurité */
+.pcp-securite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+  letter-spacing: .02em;
+}
+
+.pcp-securite svg { opacity: .4; }
+
+/* ── Messages statut ────────────────────────────────────────────────── */
+.pcp-statut {
+  width: 100%;
+  max-width: 520px;
+  border-radius: 10px;
+  padding: 28px 24px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.pcp-statut--succes {
+  background: var(--green-bg);
+  border: 1px solid #1a4530;
+}
+
+.pcp-statut--echec {
+  background: var(--red-bg);
+  border: 1px solid #4a1b1b;
+}
+
+.pcp-statut__ico {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 36px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.pcp-statut--succes .pcp-statut__ico { color: var(--green); }
+.pcp-statut--echec  .pcp-statut__ico { color: var(--red); }
+
+.pcp-statut__titre {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 22px;
+  margin-bottom: 8px;
+  color: var(--txt);
+}
+
+.pcp-statut__desc {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--txt-s);
+  line-height: 1.8;
+  letter-spacing: .02em;
+}
+
+.pcp-statut__ref {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-m);
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+
+.pcp-btn-retour {
+  display: inline-block;
+  margin-top: 20px;
+  height: 38px;
+  padding: 0 20px;
+  background: transparent;
+  border: 1px solid var(--bdr-l);
+  border-radius: 6px;
+  color: var(--txt-s);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .05em;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  text-decoration: none;
+  line-height: 38px;
+}
+
+.pcp-btn-retour:hover { border-color: var(--txt-m); color: var(--txt); }
+
+/* ── Déjà payé ──────────────────────────────────────────────────────── */
+.pcp-deja-paye {
+  width: 100%;
+  max-width: 520px;
+  background: var(--pan);
+  border: 1px solid var(--bdr);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.pcp-deja-paye__titre {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 20px;
+  color: var(--txt-s);
+  margin-bottom: 8px;
+}
+
+.pcp-deja-paye__desc {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--txt-m);
+  line-height: 1.8;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 540px) {
+  .pcp-photo-bloc { flex-direction: column; }
+  .pcp-photo-vignette { width: 100%; height: 180px; }
+}

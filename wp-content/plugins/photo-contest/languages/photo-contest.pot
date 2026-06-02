@@ -1,0 +1,81 @@
+# Copyright (C) 2024 Photo Contest Manager
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Photo Contest Manager 1.0.0\n"
+"Report-Msgid-Bugs-To: https://example.com\n"
+"POT-Creation-Date: 2024-01-01T00:00:00+00:00\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2024-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"X-Generator: WP-CLI 2.x\n"
+"Domain: photo-contest\n"
+
+msgid "Candidat"
+msgstr ""
+
+msgid "Membre du jury"
+msgstr ""
+
+msgid "Éditeur catalogue"
+msgstr ""
+
+msgid "Mon espace candidat"
+msgstr ""
+
+msgid "Mon profil"
+msgstr ""
+
+msgid "Espace jury"
+msgstr ""
+
+msgid "Catalogue"
+msgstr ""
+
+msgid "Concours Photo"
+msgstr ""
+
+msgid "Concours Photo — Tableau de bord"
+msgstr ""
+
+msgid "Le dépôt de photos est actuellement fermé."
+msgstr ""
+
+msgid "Vous avez atteint le quota de %d photo(s) maximum."
+msgstr ""
+
+msgid "Seules les images JPG sont acceptées."
+msgstr ""
+
+msgid "Le fichier dépasse la taille maximale de %d Mo."
+msgstr ""
+
+msgid "Le ratio de l'image doit être 3:2 (paysage) ou 2:3 (portrait)."
+msgstr ""
+
+msgid "Photo déposée avec succès."
+msgstr ""
+
+msgid "Photo supprimée."
+msgstr ""
+
+msgid "Photo introuvable."
+msgstr ""
+
+msgid "Cette photo ne peut plus être supprimée (elle est en cours d'examen ou retenue)."
+msgstr ""
+
+msgid "Profil enregistré."
+msgstr ""
+
+msgid "Erreur lors de la sauvegarde."
+msgstr ""
+
+msgid "Règlement accepté. Vous pouvez maintenant déposer vos photos."
+msgstr ""
+
+msgid "Non autorisé."
+msgstr ""

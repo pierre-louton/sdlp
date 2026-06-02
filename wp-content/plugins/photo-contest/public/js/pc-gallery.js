@@ -116,7 +116,7 @@
       sec.innerHTML = `
         <header class="pc-gallery-section__header">
           <h2 class="pc-gallery-section__title">${escHTML(section.nom)}</h2>
-          <span class="pc-gallery-section__count">${filled} / ${quota || '∞'}</span>
+          <span class="pc-gallery-section__count">${filled} / ${quota}</span>
         </header>
         <div class="pc-gallery-section__grid pc-grid" data-cat-id="${section.id}"></div>
         ${canAdd
@@ -290,6 +290,10 @@
 
   // ── Upload ─────────────────────────────────────────────────────────
   function handleFiles(files) {
+    if (state.uploadCategoryId <= 0) {
+      toast('Veuillez choisir une catégorie via « + Ajouter une photo ».', 'erreur');
+      return;
+    }
     const fichiers = Array.from(files).filter(f => f.type === 'image/jpeg');
     if (fichiers.length === 0) {
       toast('Seules les images JPG sont acceptées.', 'erreur');
@@ -407,11 +411,12 @@
 
     if (!confirm(msg)) return;
 
-    ids.forEach(id => supprimerPhoto(id));
+    Promise.all(ids.map(id => supprimerPhotoSilencieux(id)))
+      .finally(() => chargerPhotos());
   }
 
-  function supprimerPhoto(photoId) {
-    fetch(CFG.ajaxUrl, {
+  function supprimerPhotoSilencieux(photoId) {
+    return fetch(CFG.ajaxUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -423,15 +428,16 @@
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        toast('Photo supprimée.', 'succes');
         state.selection.delete(String(photoId));
-        // Recharge complète pour mettre à jour les compteurs par section
-        chargerPhotos();
       } else {
         toast(data.data?.message || 'Suppression impossible.', 'erreur');
       }
     })
     .catch(() => toast('Erreur réseau.', 'erreur'));
+  }
+
+  function supprimerPhoto(photoId) {
+    supprimerPhotoSilencieux(photoId).finally(() => chargerPhotos());
   }
 
   // ── Drag & drop réordonnancement (intra-section) ───────────────────
@@ -469,8 +475,13 @@
           if (!state.dragSrcId || carte.dataset.id === state.dragSrcId) return;
 
           const src  = grid.querySelector(`[data-id="${state.dragSrcId}"]`);
+          if (!src) {
+            toast('Le réordonnancement est limité à une même catégorie.', 'erreur');
+            state.dragSrcId = null;
+            return;
+          }
           const dest = carte;
-          if (!src || !dest) return;
+          if (!dest) return;
 
           const srcIdx  = [...grid.children].indexOf(src);
           const destIdx = [...grid.children].indexOf(dest);

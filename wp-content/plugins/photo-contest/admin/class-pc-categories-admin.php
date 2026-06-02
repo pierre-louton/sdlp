@@ -47,6 +47,9 @@ class PC_Categories_Admin {
             'i18n'    => [
                 'confirm_delete' => __( 'Supprimer cette catégorie ?', PC_TEXT_DOMAIN ),
                 'name_required'  => __( 'Le nom est obligatoire.', PC_TEXT_DOMAIN ),
+                'added'          => __( 'Ajoutée', PC_TEXT_DOMAIN ),
+                'updated'        => __( 'Mis à jour', PC_TEXT_DOMAIN ),
+                'generic_error'  => __( 'Erreur', PC_TEXT_DOMAIN ),
             ],
         ] );
     }
@@ -152,6 +155,9 @@ class PC_Categories_Admin {
             wp_send_json_error( [ 'message' => __( 'Toggle impossible.', PC_TEXT_DOMAIN ) ] );
         }
         $cat = PC_Categories::get( $id );
+        if ( ! $cat ) {
+            wp_send_json_error( [ 'message' => __( 'Catégorie introuvable.', PC_TEXT_DOMAIN ) ] );
+        }
         wp_send_json_success( [ 'id' => $id, 'actif' => (int) $cat['actif'] ] );
     }
 

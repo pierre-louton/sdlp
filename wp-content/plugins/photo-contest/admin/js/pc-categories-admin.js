@@ -22,10 +22,10 @@
     if (!nom) { setMsg('error', I18N.name_required); return; }
     post('pc_add_category', { nom }).then(res => {
       if (res.success) {
-        setMsg('success', 'Ajoutée');
+        setMsg('success', I18N.added || 'Ajoutée');
         location.reload();
       } else {
-        setMsg('error', res.data?.message || 'Erreur');
+        setMsg('error', res.data?.message || I18N.generic_error || 'Erreur');
       }
     });
   });
@@ -42,9 +42,9 @@
       post('pc_update_category', { id, nom }).then(res => {
         if (res.success) {
           input.dataset.original = nom;
-          setMsg('success', 'Mis à jour');
+          setMsg('success', I18N.updated || 'Mis à jour');
         } else {
-          setMsg('error', res.data?.message || 'Erreur');
+          setMsg('error', res.data?.message || I18N.generic_error || 'Erreur');
         }
       });
     }
@@ -52,7 +52,7 @@
     if (e.target.classList.contains('pc-cat-toggle')) {
       post('pc_toggle_category', { id }).then(res => {
         if (res.success) location.reload();
-        else setMsg('error', res.data?.message || 'Erreur');
+        else setMsg('error', res.data?.message || I18N.generic_error || 'Erreur');
       });
     }
 
@@ -60,7 +60,7 @@
       if (!confirm(I18N.confirm_delete)) return;
       post('pc_delete_category', { id }).then(res => {
         if (res.success) location.reload();
-        else setMsg('error', res.data?.message || 'Erreur');
+        else setMsg('error', res.data?.message || I18N.generic_error || 'Erreur');
       });
     }
   });

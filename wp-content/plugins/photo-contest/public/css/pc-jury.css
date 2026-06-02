@@ -608,6 +608,38 @@
   line-height: 1.8;
 }
 
+/* ── Filtre catégories (Phase 1) ────────────────────────────────────── */
+.pcj-cat-filter {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #161718;
+  border-bottom: 1px solid #2a2b2e;
+  flex-wrap: wrap;
+}
+.pcj-cat-filter__btn {
+  background: transparent;
+  border: 1px solid #2a2b2e;
+  color: #e8e6e1;
+  padding: 6px 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all .15s;
+}
+.pcj-cat-filter__btn:hover {
+  border-color: #c49a3c;
+  color: #c49a3c;
+}
+.pcj-cat-filter__btn.active {
+  background: #c49a3c;
+  color: #0e0f10;
+  border-color: #c49a3c;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .pcj-body { flex-direction: column; }

@@ -15,6 +15,8 @@
     enVote:       false,// verrou anti-doublon
   };
 
+  let activeCatId = 0; // 0 = toutes les catégories
+
   // ── Sélecteurs ────────────────────────────────────────────────────
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -55,7 +57,7 @@
     fetch(CFG.ajaxUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'pc_jury_get_photos', nonce: CFG.nonceGet }),
+      body: new URLSearchParams({ action: 'pc_jury_get_photos', nonce: CFG.nonceGet, category_id: activeCatId }),
     })
     .then(r => r.json())
     .then(data => {
@@ -170,6 +172,7 @@
       if (!val) return;
 
       if (key === 'Réf.') val.textContent = '#' + String(photo.id).padStart(5, '0');
+      if (key === 'Catégorie') val.textContent = photo.nom_categorie || '—';
       if (key === 'Dimensions')  val.textContent = photo.largeur_px + ' × ' + photo.hauteur_px + ' px';
       if (key === 'Ratio')  val.textContent = photo.ratio_type === '3_2' ? '3:2 — Paysage' : '2:3 — Portrait';
       if (key === 'Poids')  val.textContent = formatPoids(photo.taille_octets);
@@ -357,6 +360,16 @@
 
   // ── Binding événements ─────────────────────────────────────────────
   function bindEvents() {
+    // Filtre catégories
+    document.querySelectorAll('.pcj-cat-filter__btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pcj-cat-filter__btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeCatId = parseInt(btn.dataset.catId, 10) || 0;
+        chargerPhotos();
+      });
+    });
+
     // Boutons vote
     elBtnRetenu?.addEventListener('click', () => voter('retenue'));
     elBtnRefuse?.addEventListener('click', () => voter('refusee'));

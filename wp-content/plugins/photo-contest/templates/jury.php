@@ -34,6 +34,21 @@ defined( 'ABSPATH' ) || exit;
     </span>
   </header>
 
+  <!-- ── Filtre catégories (Phase 1) ─────────────────────────────── -->
+  <?php $categories = PC_Categories::get_all( false ); ?>
+  <?php if ( count( $categories ) > 1 ) : ?>
+  <nav class="pcj-cat-filter" aria-label="<?php esc_attr_e( 'Filtrer par catégorie', PC_TEXT_DOMAIN ); ?>">
+    <button type="button" class="pcj-cat-filter__btn active" data-cat-id="0">
+      <?php esc_html_e( 'Toutes', PC_TEXT_DOMAIN ); ?>
+    </button>
+    <?php foreach ( $categories as $cat ) : ?>
+      <button type="button" class="pcj-cat-filter__btn" data-cat-id="<?php echo (int) $cat['id']; ?>">
+        <?php echo esc_html( $cat['nom'] ); ?>
+      </button>
+    <?php endforeach; ?>
+  </nav>
+  <?php endif; ?>
+
   <!-- ── Strip miniatures ────────────────────────────────────────── -->
   <div class="pcj-strip">
     <!-- rempli par JavaScript -->
@@ -65,6 +80,10 @@ defined( 'ABSPATH' ) || exit;
         <p class="pcj-section__label"><?php esc_html_e( 'Photo', 'photo-contest' ); ?></p>
         <div class="pcj-meta-row">
           <span class="key">Réf.</span>
+          <span class="val">—</span>
+        </div>
+        <div class="pcj-meta-row" data-field="categorie">
+          <span class="key"><?php esc_html_e( 'Catégorie', PC_TEXT_DOMAIN ); ?></span>
           <span class="val">—</span>
         </div>
         <div class="pcj-meta-row">

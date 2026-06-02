@@ -22,21 +22,25 @@ class PC_Jury {
 
     // ── Lecture des photos à délibérer ────────────────────────────────
 
-    public function get_photos_pour_jury( int $jury_user_id, string $filtre = 'toutes' ): array {
+    public function get_photos_pour_jury( int $jury_user_id, string $filtre = 'toutes', int $category_id = 0 ): array {
         global $wpdb;
         $tp = PC_Database::table( PC_Database::TABLE_PHOTOS );
         $tv = PC_Database::table( PC_Database::TABLE_VOTES );
+        $tc = PC_Database::table( PC_Database::TABLE_CATEGORIES );
 
+        $cat_where = $category_id > 0 ? 'AND p.category_id = %d' : '';
+        $sql = "SELECT p.id, p.largeur_px, p.hauteur_px, p.ratio_type, p.taille_octets, p.statut, p.ordre_affichage,
+                       p.category_id, c.nom AS nom_categorie,
+                       v.decision AS mon_vote, v.commentaire AS mon_commentaire
+                FROM {$tp} p
+                LEFT JOIN {$tv} v ON v.photo_id = p.id AND v.jury_user_id = %d
+                LEFT JOIN {$tc} c ON c.id = p.category_id
+                WHERE p.statut IN ('en_attente','en_examen') {$cat_where}
+                ORDER BY p.ordre_affichage ASC";
+
+        $args = $category_id > 0 ? [ $jury_user_id, $category_id ] : [ $jury_user_id ];
         $photos = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT p.id, p.largeur_px, p.hauteur_px, p.ratio_type, p.taille_octets, p.statut, p.ordre_affichage,
-                        v.decision AS mon_vote, v.commentaire AS mon_commentaire
-                 FROM {$tp} p
-                 LEFT JOIN {$tv} v ON v.photo_id = p.id AND v.jury_user_id = %d
-                 WHERE p.statut IN ('en_attente','en_examen')
-                 ORDER BY p.ordre_affichage ASC",
-                $jury_user_id
-            ),
+            $wpdb->prepare( $sql, $args ),
             ARRAY_A
         ) ?: [];
 
@@ -186,10 +190,11 @@ class PC_Jury {
         if ( ! current_user_can( 'pc_view_all_photos' ) )
             wp_send_json_error( [ 'message' => __( 'Accès refusé.', 'photo-contest' ) ] );
 
-        $uid    = get_current_user_id();
-        $filtre = sanitize_key( $_POST['filtre'] ?? 'toutes' );
+        $uid         = get_current_user_id();
+        $filtre      = sanitize_key( $_POST['filtre'] ?? 'toutes' );
+        $category_id = isset( $_POST['category_id'] ) ? absint( $_POST['category_id'] ) : 0;
         wp_send_json_success( [
-            'photos'    => $this->get_photos_pour_jury( $uid, $filtre ),
+            'photos'    => $this->get_photos_pour_jury( $uid, $filtre, $category_id ),
             'mes_votes' => $this->get_mes_votes( $uid ),
             'stats'     => $this->get_stats_jury( $uid ),
         ] );

@@ -35,7 +35,7 @@ defined( 'ABSPATH' ) || exit;
   </header>
 
   <!-- ── Filtre catégories (Phase 1) ─────────────────────────────── -->
-  <?php $categories = PC_Categories::get_all( false ); ?>
+  <?php $categories = PC_Categories::get_all( true ); ?>
   <?php if ( count( $categories ) > 1 ) : ?>
   <nav class="pcj-cat-filter" aria-label="<?php esc_attr_e( 'Filtrer par catégorie', PC_TEXT_DOMAIN ); ?>">
     <button type="button" class="pcj-cat-filter__btn active" data-cat-id="0">

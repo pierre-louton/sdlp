@@ -172,11 +172,14 @@
       if (!val) return;
 
       if (key === 'Réf.') val.textContent = '#' + String(photo.id).padStart(5, '0');
-      if (key === 'Catégorie') val.textContent = photo.nom_categorie || '—';
       if (key === 'Dimensions')  val.textContent = photo.largeur_px + ' × ' + photo.hauteur_px + ' px';
       if (key === 'Ratio')  val.textContent = photo.ratio_type === '3_2' ? '3:2 — Paysage' : '2:3 — Portrait';
       if (key === 'Poids')  val.textContent = formatPoids(photo.taille_octets);
     });
+
+    // Catégorie : utiliser data-field pour éviter la fragili de label-text matching
+    const catRow = document.querySelector('.pcj-meta-row[data-field="categorie"] .val');
+    if (catRow) catRow.textContent = photo.nom_categorie || '—';
   }
 
   // ── État vote (déjà voté / pas encore) ───────────────────────────

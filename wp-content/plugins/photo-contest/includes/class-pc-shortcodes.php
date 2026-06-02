@@ -48,8 +48,8 @@ class PC_Shortcodes {
     }
 
     private function enqueue_jury_assets(): void {
-        wp_enqueue_style( 'pc-jury', PC_PLUGIN_URL . 'public/css/pc-jury.css', [], PC_VERSION . '.3' );
-        wp_enqueue_script( 'pc-jury', PC_PLUGIN_URL . 'public/js/pc-jury.js', [], PC_VERSION . '.3', true );
+        wp_enqueue_style( 'pc-jury', PC_PLUGIN_URL . 'public/css/pc-jury.css', [], PC_VERSION . '.4' );
+        wp_enqueue_script( 'pc-jury', PC_PLUGIN_URL . 'public/js/pc-jury.js', [], PC_VERSION . '.4', true );
         wp_localize_script( 'pc-jury', 'pcJuryConfig', [
             'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
             'nonceGet'   => wp_create_nonce( 'pc_jury_get_nonce' ),

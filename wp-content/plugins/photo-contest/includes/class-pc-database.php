@@ -162,7 +162,7 @@ class PC_Database {
             created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            KEY idx_actif (actif)
+            KEY actif (actif)
         ) {$charset};" );
 
         // Mise à jour de la version en base
@@ -181,6 +181,8 @@ class PC_Database {
             self::TABLE_VOTES,
             self::TABLE_PHOTOS,
             self::TABLE_PROFILES,
+            self::TABLE_EMAIL_TOKENS,
+            self::TABLE_CATEGORIES,
         ] as $table ) {
             $wpdb->query( 'DROP TABLE IF EXISTS ' . self::table( $table ) );
         }

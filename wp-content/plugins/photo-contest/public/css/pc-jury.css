@@ -282,6 +282,40 @@
 
 .pcj-img.chargement { opacity: 0; }
 
+/* F8 : zoom 100% au clic sur l'image */
+.pcj-img-wrap { cursor: zoom-in; }
+.pcj-img-wrap--zoom {
+  cursor: zoom-out;
+  max-width: 100%;
+  max-height: calc(100vh - var(--pc-topbar-h) - var(--pc-strip-h) - 48px);
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.pcj-img-wrap--zoom .pcj-img {
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  object-fit: none;
+}
+.pcj-img-wrap--zoom::after {
+  content: 'ZOOM 100%';
+  position: fixed;
+  top: calc(var(--pc-topbar-h) + 12px);
+  right: 16px;
+  background: var(--pc-bg-base, #0e0f10);
+  border: 1px solid var(--pc-neutre, #c49a3c);
+  color: var(--pc-neutre, #c49a3c);
+  padding: 4px 10px;
+  font-family: var(--pc-font-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  letter-spacing: .08em;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 100;
+}
+
 /* Flèches navigation latérales */
 .pcj-nav-btn {
   position: absolute;

@@ -430,6 +430,20 @@
     $('.pcj-viewer')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) allerA(state.index + 1);
     });
+
+    // F8 : clic sur l'image (ou son wrap) bascule le zoom 100% (fit ↔ taille native)
+    const wrap = $('.pcj-img-wrap');
+    if (wrap) {
+      wrap.addEventListener('click', e => {
+        // Ignorer le flash de vote et autres overlays
+        if (e.target.classList.contains('pcj-vote-flash')) return;
+        wrap.classList.toggle('pcj-img-wrap--zoom');
+      });
+    }
+    // Réinitialiser le zoom à chaque changement de photo
+    elImg?.addEventListener('load', () => {
+      wrap?.classList.remove('pcj-img-wrap--zoom');
+    });
   }
 
   // ── Lancement ─────────────────────────────────────────────────────

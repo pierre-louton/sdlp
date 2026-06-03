@@ -1,0 +1,8 @@
+.pc-reset-admin .notice.inline { display: block; margin: 16px 0; }
+.pc-reset-fieldset { display: flex; flex-direction: column; gap: 8px; padding: 16px; background: #f5f5f5; border-radius: 4px; max-width: 600px; }
+.pc-reset-fieldset label { font-size: 14px; }
+.pc-reset-ack { background: #fff4e5; padding: 10px 14px; border-left: 4px solid #d39e00; display: inline-block; }
+.pc-reset-btn { background: #b03030 !important; border-color: #8b2424 !important; }
+.pc-reset-btn:hover:not(:disabled) { background: #8b2424 !important; }
+#pc-reset-msg.pc-msg-success { color: #2c7a3b; font-weight: 500; }
+#pc-reset-msg.pc-msg-error   { color: #b03030; font-weight: 500; }

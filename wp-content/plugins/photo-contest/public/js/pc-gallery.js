@@ -505,14 +505,39 @@
   }
 
   // ── Lightbox ───────────────────────────────────────────────────────
+  // F4 : navigation clavier ← → et Esc, boutons prev/next, dans la liste
+  // courante (filtrée par statut actif via filtrerPhotos()).
+  function lightboxPhotosCourantes() {
+    return filtrerPhotos(state.photos);
+  }
+
   function ouvrirLightbox(photoId) {
-    const photo = state.photos.find(p => String(p.id) === String(photoId));
-    if (!photo || !elLightbox) return;
+    if (!elLightbox) return;
+    const photos = lightboxPhotosCourantes();
+    const index  = photos.findIndex(p => String(p.id) === String(photoId));
+    if (index < 0) return;
 
     state.lightboxPhotoId = photoId;
+    rendreLightbox(photos, index);
+
+    elLightbox.classList.add('ouvert');
+    document.body.style.overflow = 'hidden';
+
+    // Listeners — re-créés à chaque ouverture, retirés à la fermeture
+    document.addEventListener('keydown', onLightboxKey);
+    elLightbox.addEventListener('click', onLightboxBgClick);
+  }
+
+  function rendreLightbox(photos, index) {
+    const photo = photos[index];
+    const total = photos.length;
+    const hasPrev = index > 0;
+    const hasNext = index < total - 1;
 
     elLightbox.innerHTML = `
-      <button class="pc-lightbox__close" id="pc-lb-close">&#215;</button>
+      <button class="pc-lightbox__close" id="pc-lb-close" aria-label="Fermer">&#215;</button>
+      ${hasPrev ? `<button class="pc-lightbox__nav pc-lightbox__nav--prev" id="pc-lb-prev" aria-label="Précédente">&#8592;</button>` : ''}
+      ${hasNext ? `<button class="pc-lightbox__nav pc-lightbox__nav--next" id="pc-lb-next" aria-label="Suivante">&#8594;</button>` : ''}
       <div class="pc-lightbox__img-wrap">
         <img class="pc-lightbox__img" src="${escHTML(photo.url_full)}" alt="${escHTML(photo.titre || '')}">
         <div class="pc-lightbox__meta">
@@ -521,16 +546,38 @@
           <span class="pc-statut-${escHTML(photo.statut)}" style="padding:2px 8px;border-radius:3px;font-size:10px;font-family:var(--pc-font-mono)">
             ${escHTML(STATUTS_LABELS[photo.statut] || photo.statut)}
           </span>
+          <span class="pc-lightbox__counter">${index + 1} / ${total}</span>
         </div>
       </div>`;
 
-    elLightbox.classList.add('ouvert');
-    document.body.style.overflow = 'hidden';
-
+    state.lightboxPhotoId = photo.id;
     document.getElementById('pc-lb-close').addEventListener('click', fermerLightbox);
-    elLightbox.addEventListener('click', e => {
-      if (e.target === elLightbox) fermerLightbox();
-    });
+    document.getElementById('pc-lb-prev')?.addEventListener('click', e => { e.stopPropagation(); naviguerLightbox(-1); });
+    document.getElementById('pc-lb-next')?.addEventListener('click', e => { e.stopPropagation(); naviguerLightbox(+1); });
+  }
+
+  function naviguerLightbox(delta) {
+    const photos = lightboxPhotosCourantes();
+    const idx    = photos.findIndex(p => String(p.id) === String(state.lightboxPhotoId));
+    if (idx < 0) return;
+    const target = idx + delta;
+    if (target < 0 || target >= photos.length) return;
+    rendreLightbox(photos, target);
+  }
+
+  function onLightboxKey(e) {
+    if (!elLightbox?.classList.contains('ouvert')) return;
+    // Ne pas capturer si on édite un titre (input focus)
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch (e.key) {
+      case 'Escape':    fermerLightbox(); break;
+      case 'ArrowLeft':  naviguerLightbox(-1); e.preventDefault(); break;
+      case 'ArrowRight': naviguerLightbox(+1); e.preventDefault(); break;
+    }
+  }
+
+  function onLightboxBgClick(e) {
+    if (e.target === elLightbox) fermerLightbox();
   }
 
   function fermerLightbox() {
@@ -539,6 +586,8 @@
     elLightbox.innerHTML = '';
     document.body.style.overflow = '';
     state.lightboxPhotoId = null;
+    document.removeEventListener('keydown', onLightboxKey);
+    elLightbox.removeEventListener('click', onLightboxBgClick);
   }
 
   // ── Skeletons ─────────────────────────────────────────────────────

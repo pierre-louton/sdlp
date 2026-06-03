@@ -730,6 +730,39 @@
   color: var(--pc-text-primary);
 }
 
+/* F4 : navigation lightbox (boutons prev/next + compteur) */
+.pc-lightbox__nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  background: var(--pc-bg-card);
+  border: 1px solid var(--pc-border-light);
+  border-radius: 50%;
+  color: var(--pc-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+  z-index: 1001;
+}
+.pc-lightbox__nav:hover {
+  background: var(--pc-bg-card-hover);
+  color: var(--pc-text-primary);
+}
+.pc-lightbox__nav--prev { left: 24px; }
+.pc-lightbox__nav--next { right: 24px; }
+
+.pc-lightbox__counter {
+  font-family: var(--pc-font-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  color: var(--pc-text-muted);
+  letter-spacing: .08em;
+}
+
 /* Titre éditable inline */
 .pc-card__titre-wrap {
   position: absolute;

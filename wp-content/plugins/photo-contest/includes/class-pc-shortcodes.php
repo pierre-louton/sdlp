@@ -58,8 +58,8 @@ class PC_Shortcodes {
     }
 
     private function enqueue_gallery_assets(): void {
-        wp_enqueue_style( 'pc-gallery', PC_PLUGIN_URL . 'public/css/pc-gallery.css', [], PC_VERSION . '.8' );
-        wp_enqueue_script( 'pc-gallery', PC_PLUGIN_URL . 'public/js/pc-gallery.js', [], PC_VERSION . '.8', true );
+        wp_enqueue_style( 'pc-gallery', PC_PLUGIN_URL . 'public/css/pc-gallery.css', [], PC_VERSION . '.9' );
+        wp_enqueue_script( 'pc-gallery', PC_PLUGIN_URL . 'public/js/pc-gallery.js', [], PC_VERSION . '.9', true );
         wp_localize_script( 'pc-gallery', 'pcGalleryConfig', [
             'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
             'nonceGet'     => wp_create_nonce( 'pc_get_photos_nonce' ),

@@ -251,8 +251,9 @@
       })),
     ];
 
+    // F3 : afficher TOUS les statuts définis (count=0 inclus) pour que le candidat
+    // visualise le pipeline complet (en_attente → en_cours_examen → retenue / refusée …).
     section.innerHTML = filtres
-      .filter(f => f.slug === 'tous' || f.count > 0)
       .map(f => `
         <button class="pc-filter-btn ${state.filtreActif === f.slug ? 'actif' : ''}"
                 data-filtre="${f.slug}">

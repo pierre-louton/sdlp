@@ -32,6 +32,12 @@ defined( 'ABSPATH' ) || exit;
       <kbd>X</kbd> <?php esc_html_e( 'Refuser', 'photo-contest' ); ?> &nbsp;
       <kbd>←</kbd><kbd>→</kbd> <?php esc_html_e( 'Naviguer', 'photo-contest' ); ?>
     </span>
+
+    <a href="<?php echo esc_url( wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) ) ); ?>"
+       class="pcj-topbar__logout"
+       title="<?php esc_attr_e( 'Déconnexion', PC_TEXT_DOMAIN ); ?>">
+      <?php esc_html_e( 'Déconnexion', PC_TEXT_DOMAIN ); ?>
+    </a>
   </header>
 
   <!-- ── Filtre catégories (Phase 1) ─────────────────────────────── -->

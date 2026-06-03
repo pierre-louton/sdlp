@@ -33,8 +33,7 @@
   let elSections, elSidebar, elToolbar, elDropZone, elFileInput,
       elBtnUpload, elBtnSupprSel, elSelectionInfo,
       elProgressWrap, elProgressBar, elLightbox,
-      elToastContainer, elPageDropOverlay,
-      elQuotaFill, elQuotaLabel;
+      elToastContainer, elPageDropOverlay;
 
   // ── Init ───────────────────────────────────────────────────────────
   function init() {
@@ -50,8 +49,6 @@
     elLightbox       = $('.pc-lightbox');
     elToastContainer = $('.pc-toast-container');
     elPageDropOverlay = $('.pc-page-drop-overlay');
-    elQuotaFill      = $('.pc-quota-bar__fill');
-    elQuotaLabel     = $('.pc-quota-label');
 
     if (!elSections) return;
 
@@ -81,7 +78,6 @@
         const firstActive = state.categories.find(s => s.id > 0 && (s.photos || []).length < s.quota);
         state.uploadCategoryId = firstActive ? firstActive.id : 0;
         renderGalerie();
-        mettreAJourQuota(data.data.quota_utilise, data.data.quota_max);
         mettreAJourFiltres(data.data.stats_statuts || {});
       } else {
         elSections.innerHTML = '';
@@ -274,18 +270,6 @@
         renderGalerie();
       });
     });
-  }
-
-  // ── Quota ──────────────────────────────────────────────────────────
-  function mettreAJourQuota(utilise, max) {
-    if (!elQuotaFill || !elQuotaLabel) return;
-    const pct = max > 0 ? Math.round((utilise / max) * 100) : 0;
-    elQuotaFill.style.width = pct + '%';
-    elQuotaFill.classList.toggle('pc-quota-bar__fill--plein', utilise >= max);
-    elQuotaLabel.textContent = `${utilise} / ${max}`;
-
-    if (elBtnUpload) elBtnUpload.disabled = (utilise >= max);
-    if (elFileInput) elFileInput.disabled = (utilise >= max);
   }
 
   // ── Upload ─────────────────────────────────────────────────────────

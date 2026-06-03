@@ -113,39 +113,6 @@
   text-transform: uppercase;
 }
 
-.pc-topbar__quota {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pc-quota-bar {
-  width: 80px;
-  height: 3px;
-  background: var(--pc-border-light);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.pc-quota-bar__fill {
-  height: 100%;
-  background: var(--pc-accent);
-  border-radius: 2px;
-  transition: width 0.4s ease;
-}
-
-.pc-quota-bar__fill--plein {
-  background: var(--pc-danger);
-}
-
-.pc-quota-label {
-  font-family: var(--pc-font-mono);
-  font-size: 11px;
-  color: var(--pc-text-primary);
-  white-space: nowrap;
-}
-
 /* ── Corps principal ───────────────────────────────────────────────── */
 .pc-body {
   display: flex;

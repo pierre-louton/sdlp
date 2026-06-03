@@ -31,13 +31,6 @@ if ( ! $nom_complet ) {
         <?php esc_html_e( 'Règlement', PC_TEXT_DOMAIN ); ?>
       </a>
     <?php endif; ?>
-
-    <div class="pc-topbar__quota">
-      <div class="pc-quota-bar">
-        <div class="pc-quota-bar__fill" style="width:0%"></div>
-      </div>
-      <span class="pc-quota-label">0 / <?php echo (int) $quota_max; ?></span>
-    </div>
     <a href="<?php echo esc_url( wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) ) ); ?>"
        class="pc-topbar__logout"
        title="<?php esc_attr_e( 'Déconnexion', 'photo-contest' ); ?>">

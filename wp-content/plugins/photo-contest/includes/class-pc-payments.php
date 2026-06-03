@@ -32,6 +32,9 @@ class PC_Payments {
         if ( ! wp_next_scheduled( 'pc_relance_impayes_daily' ) ) {
             wp_schedule_event( time() + 60, 'daily', 'pc_relance_impayes_daily' );
         }
+
+        // Phase 2 Task 9 : endpoint /?pc_pay=<token> — Elementor-safe via plugins_loaded:20
+        add_action( 'plugins_loaded', [ $this, 'maybe_handle_payment_link' ], 20 );
     }
 
     // ── SDK Stripe ────────────────────────────────────────────────────
@@ -50,6 +53,135 @@ class PC_Payments {
     private function is_configured(): bool {
         return ! empty( PC_Settings::get( 'stripe_secret_key' ) )
             && ! empty( PC_Settings::get( 'stripe_publishable_key' ) );
+    }
+
+    // ── Endpoint /?pc_pay=<token> (Phase 2 Task 9) ───────────────────
+
+    /**
+     * Phase 2 : endpoint /?pc_pay=<token> qui crée une session Stripe Checkout pour
+     * tous les paiements groupés sous ce token, puis redirige vers Stripe.
+     *
+     * Hook : plugins_loaded priorité 20 — avant qu'Elementor n'ouvre son output buffer.
+     * Cf. skills/elementor-gotchas pour le contexte.
+     */
+    public function maybe_handle_payment_link(): void {
+        if ( empty( $_GET['pc_pay'] ) ) return;
+
+        // Filet de sécurité : vider tout buffer ouvert (Elementor & autres)
+        while ( ob_get_level() > 0 ) {
+            ob_end_clean();
+        }
+
+        // Validation stricte du token (UUID v4)
+        $token = sanitize_text_field( wp_unslash( $_GET['pc_pay'] ) );
+        if ( ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $token ) ) {
+            wp_die( esc_html__( 'Lien invalide.', PC_TEXT_DOMAIN ), '', [ 'response' => 400 ] );
+        }
+
+        global $wpdb;
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT pay.id, pay.user_id, pay.photo_id, pay.montant_centimes, pay.devise,
+                    pay.statut_paiement, pay.reference_externe,
+                    p.titre AS photo_titre
+             FROM {$payments_t} pay
+             JOIN {$photos_t} p ON p.id = pay.photo_id
+             WHERE pay.payment_token = %s",
+            $token
+        ) );
+
+        if ( empty( $rows ) ) {
+            wp_die( esc_html__( 'Lien invalide ou expiré.', PC_TEXT_DOMAIN ), '', [ 'response' => 404 ] );
+        }
+
+        // Tous les paiements doivent appartenir au même candidat
+        $user_id = (int) $rows[0]->user_id;
+
+        // Détection : déjà payés ?
+        $en_attente = array_filter( $rows, fn( $r ) => $r->statut_paiement === 'en_attente' );
+        if ( empty( $en_attente ) ) {
+            wp_die( esc_html__( 'Ce paiement a déjà été effectué.', PC_TEXT_DOMAIN ), '', [ 'response' => 410 ] );
+        }
+
+        // Authentification : redirection vers login si non connecté
+        if ( ! is_user_logged_in() ) {
+            $login_slug = (string) PC_Settings::get( 'login_slug', 'connexion' );
+            $login_url  = home_url( '/' . trim( $login_slug, '/' ) . '/' );
+            $back_url   = home_url( '/?pc_pay=' . rawurlencode( $token ) );
+            wp_safe_redirect( add_query_arg( 'redirect_to', rawurlencode( $back_url ), $login_url ) );
+            exit;
+        }
+
+        if ( get_current_user_id() !== $user_id ) {
+            wp_die( esc_html__( 'Ce lien ne vous est pas destiné.', PC_TEXT_DOMAIN ), '', [ 'response' => 403 ] );
+        }
+
+        // Création de la session Stripe
+        $autoload = PC_PLUGIN_DIR . 'vendor/autoload.php';
+        if ( ! file_exists( $autoload ) ) {
+            error_log( '[PC_Payments::maybe_handle_payment_link] vendor/autoload.php manquant — composer install requis' );
+            wp_die( esc_html__( 'Service de paiement indisponible. Contactez l\'administrateur.', PC_TEXT_DOMAIN ), '', [ 'response' => 503 ] );
+        }
+        require_once $autoload;
+
+        $stripe_key = (string) PC_Settings::get( 'stripe_secret_key', '' );
+        if ( $stripe_key === '' ) {
+            error_log( '[PC_Payments::maybe_handle_payment_link] stripe_secret_key non configurée' );
+            wp_die( esc_html__( 'Service de paiement non configuré.', PC_TEXT_DOMAIN ), '', [ 'response' => 503 ] );
+        }
+        \Stripe\Stripe::setApiKey( $stripe_key );
+
+        $line_items = [];
+        foreach ( $en_attente as $row ) {
+            $line_items[] = [
+                'price_data' => [
+                    'currency'     => strtolower( (string) $row->devise ),
+                    'product_data' => [
+                        'name' => $row->photo_titre ?: ( 'Photo #' . (int) $row->photo_id ),
+                    ],
+                    'unit_amount' => (int) $row->montant_centimes,
+                ],
+                'quantity' => 1,
+            ];
+        }
+
+        // URLs success/cancel — construites sans get_permalink() (piège Elementor)
+        $espace_page_id = (int) get_option( 'pc_page_espace_candidat', 0 );
+        $success_url = $espace_page_id > 0
+            ? home_url( '/?page_id=' . $espace_page_id . '&pc_paiement=ok' )
+            : home_url( '/?pc_paiement=ok' );
+        $cancel_url  = home_url( '/?pc_pay=' . rawurlencode( $token ) . '&canceled=1' );
+
+        // Autoriser le redirect vers Stripe (hôte externe)
+        add_filter( 'allowed_redirect_hosts', function( $hosts ) {
+            $hosts[] = 'checkout.stripe.com';
+            $hosts[] = 'connect.stripe.com';
+            return $hosts;
+        } );
+
+        try {
+            $session = \Stripe\Checkout\Session::create( [
+                'mode'           => 'payment',
+                'line_items'     => $line_items,
+                'success_url'    => $success_url,
+                'cancel_url'     => $cancel_url,
+                'customer_email' => wp_get_current_user()->user_email,
+                'metadata'       => [
+                    'pc_payment_token' => $token,
+                    'pc_user_id'       => (string) $user_id,
+                ],
+            ] );
+        } catch ( \Throwable $e ) {
+            error_log( '[PC_Payments::maybe_handle_payment_link] Stripe session error : ' . $e->getMessage() );
+            wp_die( esc_html__( 'Erreur lors de la connexion à Stripe. Réessayez plus tard.', PC_TEXT_DOMAIN ), '', [ 'response' => 502 ] );
+        }
+
+        // La référence Stripe (payment_intent) est posée par le webhook à la
+        // complétion : on retrouve les lignes par payment_token, pas par session id.
+        wp_safe_redirect( $session->url );
+        exit;
     }
 
     // ── Page de paiement ──────────────────────────────────────────────
@@ -326,12 +458,19 @@ class PC_Payments {
         $photo_id = (int) ( $session->metadata->pc_photo_id ?? 0 );
         $user_id  = (int) ( $session->metadata->pc_user_id  ?? 0 );
         $type     = $session->metadata->pc_type ?? 'impression';
+        $token    = (string) ( $session->metadata->pc_payment_token ?? '' );
 
         if ( ! $user_id ) return;
 
         // Paiement d'inscription (avant dépôt photos)
         if ( $type === 'inscription' ) {
             do_action( 'pc_inscription_paiement_recu', $user_id );
+            return;
+        }
+
+        // Phase 2 Task 9 : paiement groupé par token (plusieurs photos en une session)
+        if ( $token !== '' ) {
+            $this->on_token_checkout_completed( $token, $session );
             return;
         }
 
@@ -350,6 +489,47 @@ class PC_Payments {
 
         // Déclenche Fluent CRM + création entrée catalogue
         PC_Photos::get_instance()->update_statut( $photo_id, 'paiement_recu' );
+    }
+
+    /**
+     * Phase 2 Task 9 : finalise un paiement groupé identifié par son payment_token.
+     *
+     * Bascule toutes les lignes encore `en_attente` du token vers `paiement_recu`
+     * et déclenche la cascade (Fluent CRM + catalogue) pour chaque photo.
+     *
+     * Idempotent : Stripe peut renvoyer checkout.session.completed plusieurs fois.
+     * On ne touche que les lignes `en_attente`, donc un rejeu n'a aucun effet.
+     * Le montant par ligne (`montant_centimes`) n'est jamais écrasé par `amount_total`.
+     */
+    private function on_token_checkout_completed( string $token, object $session ): void {
+        global $wpdb;
+        $table = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT id, photo_id FROM {$table}
+             WHERE payment_token = %s AND statut_paiement = 'en_attente'",
+            $token
+        ) );
+
+        if ( empty( $rows ) ) return;
+
+        $reference = (string) ( $session->payment_intent ?? $session->id );
+        $photos    = PC_Photos::get_instance();
+
+        foreach ( $rows as $row ) {
+            $wpdb->update(
+                $table,
+                [
+                    'statut_paiement'   => 'paiement_recu',
+                    'reference_externe' => $reference,
+                    'methode'           => 'stripe_checkout',
+                ],
+                [ 'id' => (int) $row->id ]
+            );
+
+            // Déclenche Fluent CRM + création entrée catalogue
+            $photos->update_statut( (int) $row->photo_id, 'paiement_recu' );
+        }
     }
 
     private function on_payment_failed( object $intent ): void {

@@ -130,10 +130,9 @@ class PC_Jury {
         $nouveau = $nb_retenu >= $nb_refuse ? 'retenue' : 'refusee';
         PC_Photos::get_instance()->update_statut( $photo_id, $nouveau );
 
-        if ( $nouveau === 'retenue' ) {
-            PC_Photos::get_instance()->update_statut( $photo_id, 'participation_demandee' );
-            $nouveau = 'participation_demandee';
-        }
+        // Phase 2 : la cascade automatique retenue → participation_demandee est SUPPRIMÉE.
+        // La photo reste en « retenue » jusqu'à la clôture admin (PC_Payments::execute_cloture),
+        // qui bascule en lot toutes les retenues et crée les paiements groupés par candidat.
 
         return [
             'nouveau_statut' => $nouveau,

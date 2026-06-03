@@ -295,9 +295,17 @@ class PC_Database {
     }
 
     /**
-     * Supprime les doublons (même user_id + même hash_sha1 non-NULL) en ne conservant
-     * que la photo avec le MIN(id) — c'est-à-dire la plus ancienne.
-     * Supprime aussi le fichier physique des doublons éliminés.
+     * Supprime les doublons de photos (BDD + fichier disque) en gardant la plus ancienne (MIN id)
+     * par couple (user_id, hash_sha1).
+     *
+     * ATTENTION ENVIRONNEMENT DEV : si la BDD a été clonée depuis la prod et que les fichiers
+     * physiques pointent vers des chemins serveur (/home/.../) absents en local, leur hash_sha1
+     * reste NULL après backfill et ils sont IGNORÉS ici (NULL ne crée pas de groupe).
+     *
+     * IMPORTANT : une version antérieure utilisait DEFAULT '' (chaîne vide). Avec cette version,
+     * tous les fichiers absents étaient regroupés et supprimés en masse — incident 2026-06-03 :
+     * 6 photos legacy user 6 perdues sur dev. Le passage à NULL DEFAULT NULL évite ce piège.
+     *
      * Idempotent : ne fait rien si aucun doublon n'existe.
      */
     private static function dedupe_existing_photos(): void {
@@ -323,7 +331,9 @@ class PC_Database {
                 ) );
 
                 if ( $row && ! empty( $row->chemin_fichier ) && file_exists( $row->chemin_fichier ) ) {
-                    @unlink( $row->chemin_fichier );
+                    if ( ! @unlink( $row->chemin_fichier ) ) {
+                        error_log( '[PC_Database::dedupe_existing_photos] Failed to unlink ' . $row->chemin_fichier );
+                    }
                 }
 
                 $wpdb->delete( $table, [ 'id' => $duplicate_id ] );

@@ -3,7 +3,7 @@
  * Plugin Name:       Photo Contest Manager
  * Plugin URI:        https://example.com/photo-contest
  * Description:       Gestion complète d'un concours photo international : dépôt, jury, paiement, catalogue.
- * Version:           2.0.0-phase1
+ * Version:           2.0.0-phase1.1
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Votre Nom
@@ -14,7 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Constantes globales du plugin
-define( 'PC_VERSION',     '2.0.0-phase1' );
+define( 'PC_VERSION',     '2.0.0-phase1.1' );
 define( 'PC_PLUGIN_FILE', __FILE__ );
 define( 'PC_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'PC_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );

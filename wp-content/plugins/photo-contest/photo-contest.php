@@ -80,6 +80,8 @@ function pc_load_plugin(): void {
         PC_Categories_Admin::get_instance();
         require_once PC_PLUGIN_DIR . 'admin/class-pc-reset-admin.php';
         PC_Reset_Admin::get_instance();
+        require_once PC_PLUGIN_DIR . 'admin/class-pc-cloture-admin.php';
+        PC_Cloture_Admin::get_instance();
     }
 
     // Initialisation des singletons

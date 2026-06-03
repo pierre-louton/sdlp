@@ -1,0 +1,28 @@
+.pc-cloture-admin .notice.inline { display: block; margin: 16px 0; }
+.pc-cloture-recap { margin: 20px 0; }
+.pc-cloture-warning {
+    background: #fff4e5;
+    border-left: 4px solid #d39e00;
+    padding: 14px 18px;
+    margin: 20px 0;
+    max-width: 600px;
+}
+.pc-cloture-warning h3 { margin-top: 0; }
+.pc-cloture-warning ul { margin: 8px 0 0 24px; }
+.pc-cloture-warning li { margin-bottom: 4px; }
+.pc-cloture-ack {
+    background: #fff4e5;
+    padding: 10px 14px;
+    border-left: 4px solid #d39e00;
+    display: inline-block;
+}
+.pc-cloture-btn {
+    background: #b03030 !important;
+    border-color: #8b2424 !important;
+}
+.pc-cloture-btn:hover:not(:disabled) {
+    background: #8b2424 !important;
+}
+#pc-cloture-msg.pc-msg-success { color: #2c7a3b; font-weight: 500; margin-top: 16px; }
+#pc-cloture-msg.pc-msg-error   { color: #b03030; font-weight: 500; margin-top: 16px; }
+#pc-cloture-msg pre { background:#f5f5f5; padding:8px; border-radius:4px; font-size:12px; }

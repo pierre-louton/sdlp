@@ -246,7 +246,21 @@ class PC_Photos {
             ];
         }
 
-        // 6. Déplacement du fichier dans le répertoire privé
+        // 6. Déduplication par hash SHA-1 (avant tout déplacement du fichier)
+        $hash = sha1_file( $file['tmp_name'] );
+        if ( ! $hash ) {
+            return [ 'success' => false, 'message' => __( 'Impossible de calculer le hash du fichier.', PC_TEXT_DOMAIN ) ];
+        }
+
+        $existing = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_photos} WHERE user_id = %d AND hash_sha1 = %s",
+            $user_id, $hash
+        ) );
+        if ( $existing > 0 ) {
+            return [ 'success' => false, 'message' => __( 'Cette photo a déjà été déposée.', PC_TEXT_DOMAIN ) ];
+        }
+
+        // 7. Déplacement du fichier dans le répertoire privé (après vérification hash)
         $user_dir = $this->upload_dir . $user_id . '/';
         wp_mkdir_p( $user_dir );
 
@@ -257,16 +271,17 @@ class PC_Photos {
             return [ 'success' => false, 'message' => __( 'Erreur lors du déplacement du fichier.', PC_TEXT_DOMAIN ) ];
         }
 
-        // 7. Extraction du titre depuis les métadonnées EXIF/IPTC
+        // 8. Extraction du titre depuis les métadonnées EXIF/IPTC
         $titre = $this->extract_titre_from_exif( $chemin_dest, $nom_fichier );
 
-        // 8. Insertion en BDD
+        // 9. Insertion en BDD
         $wpdb->insert( $table_photos, [
             'user_id'         => $user_id,
             'category_id'     => $category_id,
             'titre'           => $titre,
             'nom_fichier'     => $nom_fichier,
             'chemin_fichier'  => $chemin_dest,
+            'hash_sha1'       => $hash,
             'taille_octets'   => $file['size'],
             'largeur_px'      => $largeur,
             'hauteur_px'      => $hauteur,

@@ -169,6 +169,10 @@ class PC_Database {
         self::add_category_column_to_photos();
         self::seed_default_category();
         self::migrate_legacy_photos_to_default_category();
+        self::add_hash_column_to_photos();
+        self::backfill_hash_sha1();
+        self::dedupe_existing_photos();
+        self::add_unique_hash_index();
 
         // Mise à jour de la version en base
         update_option( 'pc_db_version', PC_VERSION );
@@ -238,6 +242,120 @@ class PC_Database {
                 ADD KEY category_id (category_id),
                 ADD KEY user_category (user_id, category_id)" );
         }
+    }
+
+    /**
+     * Ajoute la colonne hash_sha1 à wp_pc_photos si elle n'existe pas encore.
+     *
+     * La colonne est NULLABLE : NULL signifie « fichier absent au moment de la migration,
+     * hash non calculable ». Les valeurs NULL sont ignorées par les index UNIQUE MySQL,
+     * ce qui permet à l'index unique (user_id, hash_sha1) de fonctionner même si certains
+     * fichiers n'existent pas localement (ex. photos importées depuis la prod).
+     *
+     * Idempotent : vérifie information_schema avant toute modification.
+     */
+    private static function add_hash_column_to_photos(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $col = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = %s
+               AND column_name = 'hash_sha1'",
+            $table
+        ) );
+
+        if ( ! $col ) {
+            $wpdb->query( "ALTER TABLE {$table}
+                ADD COLUMN hash_sha1 VARCHAR(40) NULL DEFAULT NULL AFTER chemin_fichier" );
+        }
+    }
+
+    /**
+     * Calcule et stocke le hash SHA-1 pour toutes les photos qui n'en ont pas encore.
+     * Les photos dont le fichier est absent (ex. données de prod) restent à NULL.
+     * Idempotent : ignore les lignes dont hash_sha1 est déjà non NULL.
+     */
+    private static function backfill_hash_sha1(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $rows = $wpdb->get_results( "SELECT id, chemin_fichier FROM {$table} WHERE hash_sha1 IS NULL" );
+        foreach ( $rows as $r ) {
+            if ( file_exists( $r->chemin_fichier ) ) {
+                $hash = sha1_file( $r->chemin_fichier );
+                if ( $hash ) {
+                    $wpdb->update( $table, [ 'hash_sha1' => $hash ], [ 'id' => (int) $r->id ] );
+                }
+            }
+            // Si le fichier est absent, on laisse hash_sha1 à NULL.
+            // NULL est ignoré par l'index UNIQUE, donc pas de conflit.
+        }
+    }
+
+    /**
+     * Supprime les doublons (même user_id + même hash_sha1 non-NULL) en ne conservant
+     * que la photo avec le MIN(id) — c'est-à-dire la plus ancienne.
+     * Supprime aussi le fichier physique des doublons éliminés.
+     * Idempotent : ne fait rien si aucun doublon n'existe.
+     */
+    private static function dedupe_existing_photos(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $groups = $wpdb->get_results(
+            "SELECT user_id, hash_sha1, MIN(id) AS keeper, GROUP_CONCAT(id) AS ids
+             FROM {$table}
+             WHERE hash_sha1 IS NOT NULL
+             GROUP BY user_id, hash_sha1
+             HAVING COUNT(*) > 1"
+        );
+
+        foreach ( $groups as $g ) {
+            $all_ids    = array_map( 'intval', explode( ',', $g->ids ) );
+            $duplicates = array_diff( $all_ids, [ (int) $g->keeper ] );
+
+            foreach ( $duplicates as $duplicate_id ) {
+                $row = $wpdb->get_row( $wpdb->prepare(
+                    "SELECT chemin_fichier FROM {$table} WHERE id = %d",
+                    $duplicate_id
+                ) );
+
+                if ( $row && ! empty( $row->chemin_fichier ) && file_exists( $row->chemin_fichier ) ) {
+                    @unlink( $row->chemin_fichier );
+                }
+
+                $wpdb->delete( $table, [ 'id' => $duplicate_id ] );
+            }
+        }
+    }
+
+    /**
+     * Ajoute l'index unique (user_id, hash_sha1) sur wp_pc_photos.
+     * Les lignes avec hash_sha1 = NULL sont exclues de l'index par MySQL.
+     * Idempotent : vérifie SHOW INDEX avant toute modification.
+     *
+     * IMPORTANT : appeler APRÈS backfill_hash_sha1() et dedupe_existing_photos()
+     * pour garantir qu'il n'y a plus de doublons (user_id, hash_sha1) avant la
+     * création de l'index UNIQUE.
+     */
+    private static function add_unique_hash_index(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PHOTOS );
+
+        $exists = $wpdb->get_var( "SHOW INDEX FROM {$table} WHERE Key_name = 'unique_user_hash'" );
+        if ( $exists ) {
+            return;
+        }
+
+        // Supprimer l'index simple hash_sha1 s'il est présent (remplacé par l'index composé unique)
+        $non_unique = $wpdb->get_var( "SHOW INDEX FROM {$table} WHERE Key_name = 'hash_sha1' AND Non_unique = 1" );
+        if ( $non_unique ) {
+            $wpdb->query( "ALTER TABLE {$table} DROP INDEX hash_sha1" );
+        }
+
+        $wpdb->query( "ALTER TABLE {$table} ADD UNIQUE KEY unique_user_hash (user_id, hash_sha1)" );
     }
 
     /**

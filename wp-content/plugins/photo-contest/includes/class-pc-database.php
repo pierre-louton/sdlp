@@ -173,6 +173,8 @@ class PC_Database {
         self::backfill_hash_sha1();
         self::dedupe_existing_photos();
         self::add_unique_hash_index();
+        self::add_payments_phase2_columns();
+        self::backfill_email_envoye_at();
 
         // Mise à jour de la version en base
         update_option( 'pc_db_version', PC_VERSION );
@@ -366,6 +368,67 @@ class PC_Database {
         }
 
         $wpdb->query( "ALTER TABLE {$table} ADD UNIQUE KEY unique_user_hash (user_id, hash_sha1)" );
+    }
+
+    /**
+     * Phase 2 : ajoute les colonnes pour le paiement groupé (payment_token + suivi cron emails/relances).
+     * Idempotent — vérifie chaque colonne et index avant ALTER.
+     */
+    private static function add_payments_phase2_columns(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PAYMENTS );
+
+        $needed = [
+            'payment_token'       => "VARCHAR(64) NULL AFTER reference_externe",
+            'email_envoye_at'     => "DATETIME NULL AFTER payment_token",
+            'derniere_relance_at' => "DATETIME NULL AFTER email_envoye_at",
+            'nb_relances'         => "TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER derniere_relance_at",
+        ];
+
+        foreach ( $needed as $col => $def ) {
+            $exists = $wpdb->get_var( $wpdb->prepare(
+                "SELECT COLUMN_NAME FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s",
+                $table, $col
+            ) );
+            if ( ! $exists ) {
+                $result = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN {$col} {$def}" );
+                if ( false === $result ) {
+                    error_log( '[PC_Database::add_payments_phase2_columns] ALTER failed for ' . $col . ' : ' . $wpdb->last_error );
+                }
+            }
+        }
+
+        // Index
+        $existing_indexes = array_map( fn( $i ) => $i->Key_name, $wpdb->get_results( "SHOW INDEX FROM {$table}" ) ?: [] );
+        if ( ! in_array( 'idx_payment_token', $existing_indexes, true ) ) {
+            $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_payment_token (payment_token)" );
+        }
+        if ( ! in_array( 'idx_email_pending', $existing_indexes, true ) ) {
+            $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_email_pending (email_envoye_at, statut_paiement)" );
+        }
+    }
+
+    /**
+     * Cohérence historique : pour les paiements déjà reçus avant Phase 2, on initialise
+     * email_envoye_at avec updated_at — sinon le cron de relance les considérerait comme
+     * éligibles à relance, alors qu'ils sont payés.
+     */
+    private static function backfill_email_envoye_at(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PAYMENTS );
+        // Vérifier que la colonne existe avant le UPDATE (évite erreur si Task 2 n'a pas tourné en amont).
+        $col = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = %s AND column_name = 'email_envoye_at'",
+            $table
+        ) );
+        if ( ! $col ) return;
+        $wpdb->query(
+            "UPDATE {$table}
+             SET email_envoye_at = updated_at
+             WHERE statut_paiement = 'paiement_recu' AND email_envoye_at IS NULL"
+        );
     }
 
     /**

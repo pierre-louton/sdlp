@@ -72,7 +72,7 @@ class PC_Reset_Admin {
             'payments'   => (int) $wpdb->get_var( "SELECT COUNT(*) FROM " . PC_Database::table( PC_Database::TABLE_PAYMENTS ) ),
             'catalogue'  => (int) $wpdb->get_var( "SELECT COUNT(*) FROM " . PC_Database::table( PC_Database::TABLE_CATALOGUE ) ),
             'candidates' => count( get_users( [ 'role' => PC_ROLE_CANDIDAT, 'fields' => 'ID' ] ) ),
-            'jurors'     => count( get_users( [ 'role' => 'jurymembre', 'fields' => 'ID' ] ) ),
+            'jurors'     => count( get_users( [ 'role' => PC_ROLE_JURY, 'fields' => 'ID' ] ) ),
         ];
 
         // Calcul du volume disque privé
@@ -205,28 +205,49 @@ class PC_Reset_Admin {
         if ( in_array( 'candidates', $scope, true ) ) {
             $ids     = get_users( [ 'role' => PC_ROLE_CANDIDAT, 'fields' => 'ID' ] );
             $deleted = 0;
+            $skipped_admins = 0;
             require_once ABSPATH . 'wp-admin/includes/user.php';
             foreach ( $ids as $uid ) {
                 $uid = (int) $uid;
+                // Garde-fou : jamais supprimer un compte qui a aussi des droits admin
+                $user_obj = get_userdata( $uid );
+                if ( ! $user_obj || user_can( $user_obj, 'manage_options' ) ) {
+                    $skipped_admins++;
+                    continue;
+                }
                 // Cascade : profiles + email_tokens
                 $wpdb->delete( PC_Database::table( PC_Database::TABLE_PROFILES ),     [ 'user_id' => $uid ] );
                 $wpdb->delete( PC_Database::table( PC_Database::TABLE_EMAIL_TOKENS ), [ 'user_id' => $uid ] );
                 if ( wp_delete_user( $uid ) ) $deleted++;
             }
             $report['candidates'] = $deleted;
-            error_log( "[PC_Reset] user={$user_id} candidates: deleted {$deleted} users + cascaded profiles/tokens" );
+            if ( $skipped_admins > 0 ) {
+                $report['candidates_skipped_admins'] = $skipped_admins;
+            }
+            error_log( "[PC_Reset] user={$user_id} candidates: deleted {$deleted} users + cascaded profiles/tokens (skipped {$skipped_admins} admins)" );
         }
 
         // 6. Jurors
         if ( in_array( 'jurors', $scope, true ) ) {
-            $ids     = get_users( [ 'role' => 'jurymembre', 'fields' => 'ID' ] );
+            $ids     = get_users( [ 'role' => PC_ROLE_JURY, 'fields' => 'ID' ] );
             $deleted = 0;
+            $skipped_admins = 0;
             require_once ABSPATH . 'wp-admin/includes/user.php';
             foreach ( $ids as $uid ) {
-                if ( wp_delete_user( (int) $uid ) ) $deleted++;
+                $uid = (int) $uid;
+                // Garde-fou : jamais supprimer un compte qui a aussi des droits admin
+                $user_obj = get_userdata( $uid );
+                if ( ! $user_obj || user_can( $user_obj, 'manage_options' ) ) {
+                    $skipped_admins++;
+                    continue;
+                }
+                if ( wp_delete_user( $uid ) ) $deleted++;
             }
             $report['jurors'] = $deleted;
-            error_log( "[PC_Reset] user={$user_id} jurors: deleted {$deleted} users" );
+            if ( $skipped_admins > 0 ) {
+                $report['jurors_skipped_admins'] = $skipped_admins;
+            }
+            error_log( "[PC_Reset] user={$user_id} jurors: deleted {$deleted} users (skipped {$skipped_admins} admins)" );
         }
 
         wp_send_json_success( [

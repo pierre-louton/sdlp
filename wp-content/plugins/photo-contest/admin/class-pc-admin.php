@@ -56,7 +56,7 @@ class PC_Admin {
             'reglement_url'          => __( 'URL du règlement PDF (depuis Médias WP)', PC_TEXT_DOMAIN ),
             'edition'                => __( 'Édition', PC_TEXT_DOMAIN ),
             'quota_photos'           => __( 'Quota max photos par catégorie (par candidat)', PC_TEXT_DOMAIN ),
-            'montant_participation_cts' => __( 'Montant participation (centimes)', PC_TEXT_DOMAIN ),
+            'montant_participation_cts' => __( 'Montant par photo retenue (centimes)', PC_TEXT_DOMAIN ),
             'devise'                 => __( 'Devise (ex: EUR)', PC_TEXT_DOMAIN ),
             'stripe_publishable_key' => __( 'Stripe — Clé publique (pk_...)', PC_TEXT_DOMAIN ),
             'stripe_secret_key'      => __( 'Stripe — Clé secrète (sk_...)', PC_TEXT_DOMAIN ),
@@ -101,6 +101,61 @@ class PC_Admin {
         }
 
         echo '</table>';
+
+        // ── Phase 2 : envoi emails par lots ─────────────────────────────
+        ?>
+        <h2 style="margin-top:24px"><?php esc_html_e( 'Envoi d\'emails (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="email_batch_size"><?php esc_html_e( 'Taille de lot', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="number" min="1" max="100" id="email_batch_size" name="pc_settings[email_batch_size]"
+                           value="<?php echo esc_attr( $s['email_batch_size'] ?? 20 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( 'Nombre d\'emails envoyés par tick cron (1-100). Défaut : 20.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="email_batch_interval_minutes"><?php esc_html_e( 'Intervalle (minutes)', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="number" min="1" max="60" id="email_batch_interval_minutes" name="pc_settings[email_batch_interval_minutes]"
+                           value="<?php echo esc_attr( $s['email_batch_interval_minutes'] ?? 5 ); ?>" class="small-text">
+                    <p class="description">
+                        <?php
+                        $size     = (int) ( $s['email_batch_size'] ?? 20 );
+                        $itv      = (int) ( $s['email_batch_interval_minutes'] ?? 5 );
+                        $per_hour = $itv > 0 ? (int) round( $size * ( 60 / $itv ) ) : 0;
+                        printf(
+                            /* translators: %d nb emails par heure */
+                            esc_html__( 'Avec ces réglages : jusqu\'à %d emails par heure.', PC_TEXT_DOMAIN ),
+                            $per_hour
+                        );
+                        ?>
+                    </p>
+                </td>
+            </tr>
+        </table>
+
+        <h2 style="margin-top:24px"><?php esc_html_e( 'Relances impayés (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="relance_jours"><?php esc_html_e( 'Délai entre relances (jours)', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="number" min="0" max="30" id="relance_jours" name="pc_settings[relance_jours]"
+                           value="<?php echo esc_attr( $s['relance_jours'] ?? 5 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( '0 = relances désactivées. Défaut : 5.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="relance_max"><?php esc_html_e( 'Nombre maximum de relances', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="number" min="0" max="5" id="relance_max" name="pc_settings[relance_max]"
+                           value="<?php echo esc_attr( $s['relance_max'] ?? 2 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( '0 = relances désactivées. Défaut : 2.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+        </table>
+        <?php
+
         printf( '<p class="submit"><input type="submit" class="button-primary" value="%s"></p>', esc_attr__( 'Enregistrer', PC_TEXT_DOMAIN ) );
         echo '</form>';
 
@@ -171,6 +226,11 @@ class PC_Admin {
         foreach ( [ 'depot_actif', 'jury_actif', 'catalogue_actif' ] as $cb ) {
             $clean[ $cb ] = ! empty( $clean[ $cb ] );
         }
+        // Phase 2 : bornes des nouveaux réglages
+        $clean['email_batch_size']             = max( 1, min( 100, (int) ( $data['email_batch_size'] ?? 20 ) ) );
+        $clean['email_batch_interval_minutes'] = max( 1, min( 60,  (int) ( $data['email_batch_interval_minutes'] ?? 5 ) ) );
+        $clean['relance_jours']                = max( 0, min( 30,  (int) ( $data['relance_jours'] ?? 5 ) ) );
+        $clean['relance_max']                  = max( 0, min( 5,   (int) ( $data['relance_max'] ?? 2 ) ) );
         PC_Settings::set( $clean );
         add_action( 'admin_notices', fn() => print '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Paramètres enregistrés.', PC_TEXT_DOMAIN ) . '</p></div>' );
     }

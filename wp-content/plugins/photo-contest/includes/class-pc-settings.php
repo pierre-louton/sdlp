@@ -59,6 +59,13 @@ class PC_Settings {
         'login_slug'                => 'connexion',  // URL custom : /connexion/
         'login_max_attempts'        => 5,
         'login_lockout_minutes'     => 15,
+
+        // Phase 2 : envoi par lots + relances impayés
+        'email_batch_size'             => 20,
+        'email_batch_interval_minutes' => 5,
+        'relance_jours'                => 5,
+        'relance_max'                  => 2,
+        'cloture_effectuee_at'         => 0,
     ];
 
     private static ?array $cache = null;

@@ -8,6 +8,7 @@ wp-content/wflogs/
 # Local config
 wp-config.php
 .htaccess
+wp-content/plugins/photo-contest/vendor/
 
 # Plugin temp scripts (utilities)
 _pc_*.php

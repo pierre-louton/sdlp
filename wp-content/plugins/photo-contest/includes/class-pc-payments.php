@@ -403,6 +403,122 @@ class PC_Payments {
         ) ?: [];
     }
 
+    // ── Clôture jury (Phase 2) ────────────────────────────────────────
+
+    /**
+     * Phase 2 : statistiques pré-clôture pour le récap admin.
+     *
+     * @return array{en_delibration_a_refuser:int, photos_retenues:int, candidats_a_notifier:int, montant_total_cts:int, montant_unitaire_cts:int}
+     */
+    public static function get_cloture_stats(): array {
+        global $wpdb;
+        $photos      = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $montant_cts = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+
+        $en_delib  = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$photos} WHERE statut IN ('en_attente', 'en_examen')"
+        );
+        $retenues  = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$photos} WHERE statut = 'retenue'"
+        );
+        $candidats = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT user_id) FROM {$photos} WHERE statut = 'retenue'"
+        );
+
+        return [
+            'en_delibration_a_refuser' => $en_delib,
+            'photos_retenues'          => $retenues,
+            'candidats_a_notifier'     => $candidats,
+            'montant_total_cts'        => $retenues * $montant_cts,
+            'montant_unitaire_cts'     => $montant_cts,
+        ];
+    }
+
+    /**
+     * Phase 2 : exécute la clôture de la délibération du jury.
+     *
+     * Séquence :
+     *  1. Verrou anti-double-clic (cloture_en_cours)
+     *  2. Refus en lot des photos restantes en délibération
+     *  3. Pour chaque candidat à photos retenues : génération d'un payment_token, bascule vers
+     *     participation_demandee, INSERT dans wp_pc_payments (1 ligne par photo)
+     *  4. Bascule des flags (jury_actif=false, cloture_effectuee_at=time())
+     *  5. Planification du 1er tick cron d'envoi d'emails
+     *  6. do_action( 'pc_cloture_jury_effectuee' )
+     *
+     * @return array{refused_count?:int, retenues_count?:int, candidats_count?:int, error?:string}
+     */
+    public static function execute_cloture(): array {
+        global $wpdb;
+        $photos_t    = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t  = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $montant_cts = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+
+        // 1. Verrou anti-double-clic
+        $lock_at = (int) PC_Settings::get( 'cloture_en_cours', 0 );
+        if ( $lock_at && ( time() - $lock_at ) < 300 ) {
+            return [ 'error' => 'cloture_en_cours' ];
+        }
+        PC_Settings::set( 'cloture_en_cours', time() );
+
+        // 2. Refus en lot
+        $refused = (int) $wpdb->query(
+            "UPDATE {$photos_t}
+             SET statut = 'refusee'
+             WHERE statut IN ('en_attente', 'en_examen')"
+        );
+
+        // 3. Bascule par candidat + création paiements
+        $candidats = $wpdb->get_col(
+            "SELECT DISTINCT user_id FROM {$photos_t} WHERE statut = 'retenue'"
+        );
+
+        $total_retenues = 0;
+        foreach ( $candidats as $user_id ) {
+            $user_id = (int) $user_id;
+            $token   = wp_generate_uuid4();
+
+            $retenue_ids = $wpdb->get_col( $wpdb->prepare(
+                "SELECT id FROM {$photos_t} WHERE user_id = %d AND statut = 'retenue'",
+                $user_id
+            ) );
+
+            foreach ( $retenue_ids as $photo_id ) {
+                $photo_id = (int) $photo_id;
+                $wpdb->update( $photos_t, [ 'statut' => 'participation_demandee' ], [ 'id' => $photo_id ] );
+                $wpdb->insert( $payments_t, [
+                    'photo_id'         => $photo_id,
+                    'user_id'          => $user_id,
+                    'montant_centimes' => $montant_cts,
+                    'devise'           => 'EUR',
+                    'statut_paiement'  => 'en_attente',
+                    'methode'          => 'stripe_checkout',
+                    'payment_token'    => $token,
+                ] );
+                $total_retenues++;
+            }
+        }
+
+        // 4. Bascule des flags
+        PC_Settings::set( 'jury_actif',           false );
+        PC_Settings::set( 'cloture_en_cours',     0 );
+        PC_Settings::set( 'cloture_effectuee_at', time() );
+
+        // 5. Planification du 1er tick cron d'envoi d'emails
+        if ( ! wp_next_scheduled( 'pc_send_payment_email_batch' ) ) {
+            wp_schedule_single_event( time(), 'pc_send_payment_email_batch' );
+        }
+
+        // 6. Trigger
+        do_action( 'pc_cloture_jury_effectuee' );
+
+        return [
+            'refused_count'   => $refused,
+            'retenues_count'  => $total_retenues,
+            'candidats_count' => count( $candidats ),
+        ];
+    }
+
     // ── Utilitaires ───────────────────────────────────────────────────
 
     public function get_thumb_url( int $photo_id ): string {

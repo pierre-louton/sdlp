@@ -136,6 +136,7 @@ register_activation_hook( __FILE__, 'pc_activate' );
 function pc_deactivate(): void {
     flush_rewrite_rules();
     wp_clear_scheduled_hook( 'pc_send_payment_email_batch' );
+    wp_clear_scheduled_hook( 'pc_relance_impayes_daily' );
 }
 register_deactivation_hook( __FILE__, 'pc_deactivate' );
 

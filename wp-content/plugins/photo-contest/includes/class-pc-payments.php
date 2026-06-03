@@ -25,6 +25,13 @@ class PC_Payments {
         add_action( 'wp_ajax_pc_create_inscription_session', [ $this, 'ajax_create_inscription_session' ] );
         add_action( 'wp_enqueue_scripts',         [ $this, 'maybe_enqueue_assets' ] );
         add_action( 'pc_send_payment_email_batch', [ $this, 'cron_send_batch' ] );
+
+        // Phase 2 : relances quotidiennes des paiements impayés
+        add_action( 'pc_relance_impayes_daily', [ $this, 'cron_relances_quotidiennes' ] );
+
+        if ( ! wp_next_scheduled( 'pc_relance_impayes_daily' ) ) {
+            wp_schedule_event( time() + 60, 'daily', 'pc_relance_impayes_daily' );
+        }
     }
 
     // ── SDK Stripe ────────────────────────────────────────────────────
@@ -586,6 +593,82 @@ class PC_Payments {
             if ( ! wp_next_scheduled( 'pc_send_payment_email_batch' ) ) {
                 wp_schedule_single_event( time() + ( $itv * 60 ), 'pc_send_payment_email_batch' );
             }
+        }
+    }
+
+    /**
+     * Phase 2 : tick WP-Cron quotidien — relance des candidats avec paiements impayés.
+     *
+     * Désactivé si pc_settings.relance_jours = 0 ou pc_settings.relance_max = 0.
+     *
+     * Conditions de sélection :
+     *  - statut_paiement = 'en_attente'
+     *  - email_envoye_at IS NOT NULL (l'email initial a été envoyé)
+     *  - email_envoye_at < NOW() - INTERVAL relance_jours DAY (assez vieux)
+     *  - nb_relances < relance_max (n'a pas atteint le plafond)
+     *  - derniere_relance_at IS NULL OR < NOW() - INTERVAL relance_jours DAY (cooldown respecté)
+     *
+     * Pour chaque candidat retourné : trigger pc_relance_paiement, UPDATE nb_relances + derniere_relance_at.
+     * La taille de lot est bornée par pc_settings.email_batch_size (même limite que l'envoi initial).
+     */
+    public function cron_relances_quotidiennes(): void {
+        global $wpdb;
+
+        $relance_jours = (int) PC_Settings::get( 'relance_jours', 5 );
+        $relance_max   = (int) PC_Settings::get( 'relance_max', 2 );
+
+        if ( $relance_jours === 0 || $relance_max === 0 ) {
+            return; // Désactivé via réglages
+        }
+
+        $payments = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $batch    = max( 1, min( 100, (int) PC_Settings::get( 'email_batch_size', 20 ) ) );
+
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT user_id, payment_token,
+                    COUNT(*)                  AS nb_photos,
+                    SUM(montant_centimes)     AS montant_total,
+                    MAX(nb_relances)          AS nb_relances_actuel,
+                    MAX(derniere_relance_at)  AS last_relance
+             FROM {$payments}
+             WHERE statut_paiement = 'en_attente'
+               AND email_envoye_at IS NOT NULL
+               AND email_envoye_at < DATE_SUB( NOW(), INTERVAL %d DAY )
+               AND payment_token IS NOT NULL
+             GROUP BY user_id, payment_token
+             HAVING nb_relances_actuel < %d
+                AND ( last_relance IS NULL
+                      OR last_relance < DATE_SUB( NOW(), INTERVAL %d DAY ) )
+             LIMIT %d",
+            $relance_jours, $relance_max, $relance_jours, $batch
+        ) );
+
+        foreach ( $rows as $row ) {
+            $user_id     = (int) $row->user_id;
+            $token       = (string) $row->payment_token;
+            $nb_photos   = (int) $row->nb_photos;
+            $montant_cts = (int) $row->montant_total;
+            $payment_url = home_url( '/?pc_pay=' . rawurlencode( $token ) );
+            $nb_done     = (int) $row->nb_relances_actuel + 1;
+
+            // Hook consommé par PC_Fluent_CRM (Task 12). Sans listener : graceful degradation.
+            do_action( 'pc_relance_paiement', $user_id, [
+                'nb_photos'   => $nb_photos,
+                'montant_cts' => $montant_cts,
+                'payment_url' => $payment_url,
+                'nb_relances' => $nb_done,
+            ] );
+
+            // Incrément nb_relances + horodatage derniere_relance_at sur toutes les lignes du groupe
+            $wpdb->query( $wpdb->prepare(
+                "UPDATE {$payments}
+                 SET derniere_relance_at = NOW(),
+                     nb_relances         = nb_relances + 1
+                 WHERE user_id = %d
+                   AND payment_token = %s
+                   AND statut_paiement = 'en_attente'",
+                $user_id, $token
+            ) );
         }
     }
 

@@ -292,11 +292,19 @@
 
   // ── Progression ───────────────────────────────────────────────────
   function mettreAJourProgression() {
-    const total  = state.photos.length;
-    const votes  = Object.keys(state.votes).length;
-    const retenus = Object.values(state.votes).filter(v => v.decision === 'retenue').length;
-    const refuses = Object.values(state.votes).filter(v => v.decision === 'refusee').length;
-    const pct    = total > 0 ? Math.round((votes / total) * 100) : 0;
+    // Restreindre les votes au périmètre actuel (filtre catégorie) — sinon
+    // votes = tous les votes du juré (toutes cat.) et total = photos visibles
+    // → ratio > 100 % et "examinées 15/11" (cf. bugs B6/B7).
+    const total = state.photos.length;
+    const idsVisibles = new Set(state.photos.map(p => String(p.id)));
+    const votesVisibles = Object.entries(state.votes)
+      .filter(([pid]) => idsVisibles.has(String(pid)))
+      .map(([, v]) => v);
+
+    const votes   = votesVisibles.length;
+    const retenus = votesVisibles.filter(v => v.decision === 'retenue').length;
+    const refuses = votesVisibles.filter(v => v.decision === 'refusee').length;
+    const pct     = total > 0 ? Math.round((votes / total) * 100) : 0;
 
     if (elProgressFill) elProgressFill.style.width = pct + '%';
     if (elProgressPct)  elProgressPct.textContent  = pct + '%';

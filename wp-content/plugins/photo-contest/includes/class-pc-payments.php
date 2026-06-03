@@ -24,6 +24,7 @@ class PC_Payments {
         add_action( 'wp_ajax_pc_create_checkout_session', [ $this, 'ajax_create_session' ] );
         add_action( 'wp_ajax_pc_create_inscription_session', [ $this, 'ajax_create_inscription_session' ] );
         add_action( 'wp_enqueue_scripts',         [ $this, 'maybe_enqueue_assets' ] );
+        add_action( 'pc_send_payment_email_batch', [ $this, 'cron_send_batch' ] );
     }
 
     // ── SDK Stripe ────────────────────────────────────────────────────
@@ -517,6 +518,75 @@ class PC_Payments {
             'retenues_count'  => $total_retenues,
             'candidats_count' => count( $candidats ),
         ];
+    }
+
+    /**
+     * Phase 2 : tick WP-Cron — envoie une fournée d'emails de demande de paiement groupé.
+     *
+     * SELECT groupe (user_id, payment_token) avec email_envoye_at IS NULL, taille bornée par
+     * pc_settings.email_batch_size. Pour chaque groupe : trigger Fluent CRM (Task 12) + marquer
+     * email_envoye_at. Re-planifie un tick suivant si reste des entrées en attente.
+     */
+    public function cron_send_batch(): void {
+        global $wpdb;
+        $payments = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $batch    = max( 1, min( 100, (int) PC_Settings::get( 'email_batch_size', 20 ) ) );
+
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT user_id, payment_token,
+                    GROUP_CONCAT(photo_id) AS photo_ids,
+                    SUM(montant_centimes) AS montant_total,
+                    COUNT(*)              AS nb_photos
+             FROM {$payments}
+             WHERE email_envoye_at IS NULL
+               AND statut_paiement = 'en_attente'
+               AND payment_token IS NOT NULL
+             GROUP BY user_id, payment_token
+             LIMIT %d",
+            $batch
+        ) );
+
+        foreach ( $rows as $row ) {
+            $user_id     = (int) $row->user_id;
+            $token       = (string) $row->payment_token;
+            $nb_photos   = (int) $row->nb_photos;
+            $montant_cts = (int) $row->montant_total;
+            $payment_url = home_url( '/?pc_pay=' . rawurlencode( $token ) );
+
+            // Hook consommé par PC_Fluent_CRM (Task 12). En l'absence de listener,
+            // l'événement est silencieusement ignoré (graceful degradation).
+            do_action( 'pc_participation_demandee_groupee', $user_id, [
+                'nb_photos'   => $nb_photos,
+                'montant_cts' => $montant_cts,
+                'payment_url' => $payment_url,
+            ] );
+
+            // Marquer envoyés (idempotent : si l'UPDATE échoue partiellement, le tick suivant
+            // retentera mais le hook Fluent CRM pourra être déclenché plusieurs fois ; la
+            // déduplication finale est côté Fluent CRM via le contact email).
+            $wpdb->query( $wpdb->prepare(
+                "UPDATE {$payments}
+                 SET email_envoye_at = NOW()
+                 WHERE user_id = %d AND payment_token = %s AND email_envoye_at IS NULL",
+                $user_id, $token
+            ) );
+        }
+
+        // S'il reste des paiements en attente d'email, replanifier le prochain tick
+        $remaining = (int) $wpdb->get_var(
+            "SELECT COUNT(*)
+             FROM {$payments}
+             WHERE email_envoye_at IS NULL
+               AND statut_paiement = 'en_attente'
+               AND payment_token IS NOT NULL"
+        );
+
+        if ( $remaining > 0 ) {
+            $itv = max( 1, min( 60, (int) PC_Settings::get( 'email_batch_interval_minutes', 5 ) ) );
+            if ( ! wp_next_scheduled( 'pc_send_payment_email_batch' ) ) {
+                wp_schedule_single_event( time() + ( $itv * 60 ), 'pc_send_payment_email_batch' );
+            }
+        }
     }
 
     // ── Utilitaires ───────────────────────────────────────────────────

@@ -102,6 +102,21 @@ class PC_Admin {
 
         echo '</table>';
 
+        // ── Photos ──────────────────────────────────────────────────────
+        ?>
+        <h2 style="margin-top:24px"><?php esc_html_e( 'Photos', PC_TEXT_DOMAIN ); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="poids_max_mo"><?php esc_html_e( 'Poids maximum par photo (Mo)', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="number" min="1" max="100" id="poids_max_mo" name="pc_settings[poids_max_mo]"
+                           value="<?php echo esc_attr( $s['poids_max_mo'] ?? 40 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( 'Taille maximale d\'un fichier photo accepté à l\'upload (1-100). Défaut : 40. Doit rester inférieur à upload_max_filesize / post_max_size du serveur.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+        </table>
+
+        <?php
         // ── Phase 2 : envoi emails par lots ─────────────────────────────
         ?>
         <h2 style="margin-top:24px"><?php esc_html_e( 'Envoi d\'emails (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
@@ -231,6 +246,7 @@ class PC_Admin {
         $clean['email_batch_interval_minutes'] = max( 1, min( 60,  (int) ( $data['email_batch_interval_minutes'] ?? 5 ) ) );
         $clean['relance_jours']                = max( 0, min( 30,  (int) ( $data['relance_jours'] ?? 5 ) ) );
         $clean['relance_max']                  = max( 0, min( 5,   (int) ( $data['relance_max'] ?? 2 ) ) );
+        $clean['poids_max_mo']                 = max( 1, min( 100, (int) ( $data['poids_max_mo'] ?? 40 ) ) );
         PC_Settings::set( $clean );
         add_action( 'admin_notices', fn() => print '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Paramètres enregistrés.', PC_TEXT_DOMAIN ) . '</p></div>' );
     }

@@ -219,13 +219,13 @@ class PC_Photos {
         }
 
         // 4. Poids
-        $poids_max = (int) PC_Settings::get( 'poids_max_mo', 20 ) * 1024 * 1024;
+        $poids_max = (int) PC_Settings::get( 'poids_max_mo', 40 ) * 1024 * 1024;
         if ( $file['size'] > $poids_max ) {
             return [
                 'success' => false,
                 'message' => sprintf(
                     __( 'Le fichier dépasse la taille maximale de %d Mo.', PC_TEXT_DOMAIN ),
-                    PC_Settings::get( 'poids_max_mo', 20 )
+                    PC_Settings::get( 'poids_max_mo', 40 )
                 ),
             ];
         }

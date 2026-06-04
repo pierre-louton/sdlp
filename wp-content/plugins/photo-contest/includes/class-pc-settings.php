@@ -26,7 +26,7 @@ class PC_Settings {
 
         // Photos
         'quota_photos'              => 5,          // nombre max par catégorie (et par candidat)
-        'poids_max_mo'              => 20,         // en mégaoctets
+        'poids_max_mo'              => 40,         // en mégaoctets
         'ratio_autorises'           => ['3_2', '2_3'],
 
         // Paiement

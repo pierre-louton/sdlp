@@ -147,12 +147,33 @@ class PC_Security {
             'index.php?pc_login=1',
             'top'
         );
-        // Flush si la règle n'existe pas encore OU si le slug a changé depuis le dernier flush
+        // Flush si le slug a changé depuis le dernier flush, OU — défense en
+        // profondeur — si la règle a disparu de rewrite_rules. Un flush externe
+        // (wp rewrite flush, (dé)activation d'un autre plugin, déploiement…) peut
+        // régénérer rewrite_rules SANS notre règle, sans que le slug change : le
+        // garde-fou basé sur le seul slug ne le détecte pas et la connexion
+        // candidat reste cassée en silence (la règle ^connexion/?$ disparaît).
         $flushed_slug = get_option( 'pc_login_rewrite_flushed', '' );
-        if ( $flushed_slug !== $this->login_slug ) {
+        if ( $flushed_slug !== $this->login_slug || ! $this->login_rule_presente() ) {
             flush_rewrite_rules();
             update_option( 'pc_login_rewrite_flushed', $this->login_slug );
         }
+    }
+
+    /**
+     * Vérifie que la rewrite rule de la page de connexion custom est bien
+     * présente dans l'option rewrite_rules. Lecture pure, sans effet de bord.
+     *
+     * Avec des permaliens « simples » (pas de structure), il n'y a aucune
+     * rewrite rule : on considère la règle « présente » pour ne PAS déclencher
+     * un flush à chaque requête.
+     */
+    private function login_rule_presente(): bool {
+        if ( ! get_option( 'permalink_structure' ) ) {
+            return true;
+        }
+        $rules = get_option( 'rewrite_rules' );
+        return is_array( $rules ) && isset( $rules[ '^' . $this->login_slug . '/?$' ] );
     }
 
     /**

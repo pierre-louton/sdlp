@@ -514,9 +514,9 @@ class PC_Payments {
 
         if ( empty( $rows ) ) return;
 
-        $reference  = (string) ( $session->payment_intent ?? $session->id );
-        $tag_paye   = (int) PC_Settings::get( 'fluent_tag_paye', 0 );
-        $first_user = 0;
+        $reference = (string) ( $session->payment_intent ?? $session->id );
+        $tag_paye  = (int) PC_Settings::get( 'fluent_tag_paye', 0 );
+        $user_id   = 0;
         foreach ( $rows as $row ) {
             $wpdb->update(
                 $table,
@@ -528,11 +528,11 @@ class PC_Payments {
                 [ 'id' => (int) $row->id ]
             );
             // NE PAS changer le statut jury de la photo : elle reste en_attente, juste « payée ».
-            $first_user = (int) $row->user_id;
+            $user_id = (int) $row->user_id; // toutes les lignes d'un token partagent le même candidat
         }
 
-        if ( $first_user > 0 ) {
-            do_action( 'pc_paiement_panier_recu', $first_user, $tag_paye );
+        if ( $user_id > 0 ) {
+            do_action( 'pc_paiement_panier_recu', $user_id, $tag_paye );
         }
     }
 
@@ -670,8 +670,9 @@ class PC_Payments {
 
         $token = wp_generate_uuid4();
         foreach ( $photo_ids as $pid ) {
-            // Nettoyer une éventuelle ligne en_attente orpheline (panier abandonné)
-            $wpdb->delete( $payments_t, [ 'photo_id' => (int) $pid, 'statut_paiement' => 'en_attente' ] );
+            // Nettoyer une éventuelle ligne en_attente orpheline (panier abandonné).
+            // Borné par user_id : on ne touche que les lignes du candidat courant.
+            $wpdb->delete( $payments_t, [ 'photo_id' => (int) $pid, 'user_id' => $user_id, 'statut_paiement' => 'en_attente' ] );
             $wpdb->insert( $payments_t, [
                 'photo_id'         => (int) $pid,
                 'user_id'          => $user_id,

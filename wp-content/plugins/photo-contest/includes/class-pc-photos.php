@@ -274,6 +274,11 @@ class PC_Photos {
         // 8. Extraction du titre depuis les métadonnées EXIF/IPTC
         $titre = $this->extract_titre_from_exif( $chemin_dest, $nom_fichier );
 
+        // Anonymat jury : ne jamais importer un titre EXIF contenant le nom du candidat.
+        if ( $titre !== '' && $this->titre_contient_nom( $titre, $user_id ) ) {
+            $titre = '';
+        }
+
         // 9. Insertion en BDD
         $wpdb->insert( $table_photos, [
             'user_id'         => $user_id,
@@ -467,11 +472,48 @@ class PC_Photos {
             wp_send_json_error( [ 'message' => __( 'Photo introuvable.', PC_TEXT_DOMAIN ) ] );
         }
 
+        if ( $titre !== '' && $this->titre_contient_nom( $titre, $user_id ) ) {
+            wp_send_json_error( [ 'message' => __( 'Le titre ne doit pas contenir votre nom ni votre prénom.', PC_TEXT_DOMAIN ) ] );
+        }
+
         global $wpdb;
         $table = PC_Database::table( PC_Database::TABLE_PHOTOS );
         $wpdb->update( $table, [ 'titre' => $titre ], [ 'id' => $photo_id, 'user_id' => $user_id ] );
 
         wp_send_json_success( [ 'titre' => $titre ] );
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Anonymat jury : détection du nom dans le titre
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Vrai si le titre contient le prénom ou le nom du candidat (mot entier,
+     * insensible à la casse et aux accents). Termes vides ou < 2 caractères ignorés.
+     */
+    public function titre_contient_nom( string $titre, int $user_id ): bool {
+        $titre_norm = $this->normaliser_pour_comparaison( $titre );
+        if ( $titre_norm === '' ) {
+            return false;
+        }
+        $profile = PC_Profile::get_instance()->get_profile( $user_id ) ?: [];
+        foreach ( [ $profile['prenom'] ?? '', $profile['nom'] ?? '' ] as $terme ) {
+            $terme_norm = $this->normaliser_pour_comparaison( (string) $terme );
+            if ( mb_strlen( $terme_norm ) < 2 ) {
+                continue;
+            }
+            if ( preg_match( '/\b' . preg_quote( $terme_norm, '/' ) . '\b/u', $titre_norm ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Minuscule + suppression des accents, pour comparaison tolérante.
+     */
+    private function normaliser_pour_comparaison( string $s ): string {
+        return trim( mb_strtolower( remove_accents( $s ) ) );
     }
 
     // ──────────────────────────────────────────────────────────────────────

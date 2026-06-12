@@ -407,6 +407,9 @@ class PC_Database {
         if ( ! in_array( 'idx_email_pending', $existing_indexes, true ) ) {
             $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_email_pending (email_envoye_at, statut_paiement)" );
         }
+        if ( ! in_array( 'idx_photo_statut', $existing_indexes, true ) ) {
+            $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_photo_statut (photo_id, statut_paiement)" );
+        }
     }
 
     /**

@@ -591,6 +591,56 @@ class PC_Payments {
         ) ?: [];
     }
 
+    // ── Helpers caddy (Task 1 — paiement avant jury) ─────────────────
+
+    /**
+     * Une photo est « payée » s'il existe une ligne paiement_recu pour son id.
+     */
+    public function photo_est_payee( int $photo_id ): bool {
+        global $wpdb;
+        $t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        return (bool) $wpdb->get_var( $wpdb->prepare(
+            "SELECT 1 FROM {$t} WHERE photo_id = %d AND statut_paiement = 'paiement_recu' LIMIT 1",
+            $photo_id
+        ) );
+    }
+
+    /**
+     * Récapitulatif de paiement (« caddy ») pour un candidat, sur ses photos en_attente.
+     *
+     * @return array{prix_unitaire_cts:int,nb_payees:int,nb_non_payees:int,montant_paye_cts:int,montant_du_cts:int,total_cts:int}
+     */
+    public function get_caddy( int $user_id ): array {
+        global $wpdb;
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $prix       = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+
+        $nb_payees = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND EXISTS ( SELECT 1 FROM {$payments_t} pay
+                            WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
+        $nb_non_payees = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND NOT EXISTS ( SELECT 1 FROM {$payments_t} pay
+                                WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
+
+        return [
+            'prix_unitaire_cts' => $prix,
+            'nb_payees'         => $nb_payees,
+            'nb_non_payees'     => $nb_non_payees,
+            'montant_paye_cts'  => $nb_payees * $prix,
+            'montant_du_cts'    => $nb_non_payees * $prix,
+            'total_cts'         => ( $nb_payees + $nb_non_payees ) * $prix,
+        ];
+    }
+
     // ── Clôture jury (Phase 2) ────────────────────────────────────────
 
     /**

@@ -107,6 +107,8 @@ class PC_Shortcodes {
             $reglement_url = PC_Settings::get( 'reglement_url', '' );
             $espace_url = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
             $logout_url = wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) );
+            $caddy = PC_Payments::get_instance()->get_caddy( $user_id );
+            $depot_actif_now = PC_Settings::is_depot_actif();
             wp_enqueue_style(  'pc-profile', PC_PLUGIN_URL . 'public/css/pc-profile.css', [], PC_VERSION . '.4' );
             wp_enqueue_script( 'pc-profile', PC_PLUGIN_URL . 'public/js/pc-profile.js',  [], PC_VERSION . '.4', true );
             wp_localize_script( 'pc-profile', 'pcProfileConfig', [
@@ -136,6 +138,8 @@ class PC_Shortcodes {
         $reglement_url = PC_Settings::get( 'reglement_url', '' );
         $espace_url = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
         $logout_url = wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) );
+        $caddy = PC_Payments::get_instance()->get_caddy( $user_id );
+        $depot_actif_now = PC_Settings::is_depot_actif();
 
         wp_enqueue_style(  'pc-profile', PC_PLUGIN_URL . 'public/css/pc-profile.css', [], PC_VERSION . '.4' );
         wp_enqueue_script( 'pc-profile', PC_PLUGIN_URL . 'public/js/pc-profile.js',  [], PC_VERSION . '.4', true );

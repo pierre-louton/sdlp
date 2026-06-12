@@ -103,38 +103,26 @@
     });
   }
 
-  // ── Paiement inscription ─────────────────────────────────────────
-  const btnPaiement = document.getElementById('pcp-btn-paiement');
-  const msgPaiement = document.getElementById('pcp-paiement-msg');
-
-  if (btnPaiement) {
-    btnPaiement.addEventListener('click', () => {
-      btnPaiement.classList.add('chargement');
-      btnPaiement.disabled = true;
-
-      fetch(CFG.ajaxUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          action: 'pc_create_inscription_session',
-          nonce:  CFG.nonceSave,
-        }),
-      })
-        .then(r => r.json())
-        .then(res => {
-          if (res.success && res.data?.url) {
+  // ── Caddy : paiement des photos ──────────────────────────────────
+  var btnCaddy = document.getElementById('pcp-btn-caddy');
+  if (btnCaddy) {
+    btnCaddy.addEventListener('click', function () {
+      btnCaddy.disabled = true;
+      var body = new URLSearchParams();
+      body.append('action', 'pc_create_caddy_session');
+      body.append('nonce', CFG.nonceSave);
+      fetch(CFG.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.success && res.data && res.data.url) {
             window.location.href = res.data.url;
           } else {
-            afficherMsg(msgPaiement, 'erreur', res.data?.message || 'Erreur Stripe.');
-            btnPaiement.classList.remove('chargement');
-            btnPaiement.disabled = false;
+            btnCaddy.disabled = false;
+            var msg = document.getElementById('pcp-caddy-msg');
+            if (msg) { msg.textContent = (res && res.data && res.data.message) ? res.data.message : 'Erreur'; }
           }
         })
-        .catch(() => {
-          afficherMsg(msgPaiement, 'erreur', 'Erreur réseau.');
-          btnPaiement.classList.remove('chargement');
-          btnPaiement.disabled = false;
-        });
+        .catch(function () { btnCaddy.disabled = false; });
     });
   }
 

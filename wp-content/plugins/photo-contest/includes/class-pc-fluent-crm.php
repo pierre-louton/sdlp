@@ -8,11 +8,11 @@ defined( 'ABSPATH' ) || exit;
  * et déclenche les séquences email selon les changements de statut photo.
  *
  * Séquences gérées :
- *  - Inscription : candidat ajouté à la liste "Tous les candidats"
- *  - Retenue     : candidat ajouté à la liste "Retenus", email d'annonce
- *  - Refusée     : email de notification de refus
- *  - Participation demandée : email avec lien de paiement
- *  - Paiement reçu : email de confirmation d'impression
+ *  - Inscription          : candidat ajouté à la liste "Tous les candidats"
+ *  - Retenue              : candidat ajouté à la liste "Retenus", email d'annonce
+ *  - Refusée              : email de notification de refus
+ *  - Paiement panier reçu : tag "payé" + automation de confirmation
+ *  - Relance paiement     : automation de relance J-10 / J-5
  */
 class PC_Fluent_CRM {
 
@@ -34,6 +34,12 @@ class PC_Fluent_CRM {
 
         // Synchronisation à la complétion du profil
         add_action( 'pc_profile_completed', [ $this, 'on_profile_completed' ] );
+
+        // Paiement panier reçu (webhook Stripe) : tag payé + automation de confirmation
+        add_action( 'pc_paiement_panier_recu', [ $this, 'on_paiement_panier_recu' ], 10, 2 );
+
+        // Relance de paiement (cron J-10 / J-5)
+        add_action( 'pc_relance_paiement', [ $this, 'on_relance_paiement' ], 10, 2 );
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -164,25 +170,6 @@ class PC_Fluent_CRM {
                 ] );
                 break;
 
-            case 'participation_demandee':
-                // Génération du lien de paiement et envoi par mail
-                $lien_paiement = $this->get_payment_link( $user_id, $photo_id );
-                $this->fire_automation( $user_id, 'pc_participation_demandee', [
-                    'photo_id'       => $photo_id,
-                    'lien_paiement'  => $lien_paiement,
-                    'montant'        => PC_Settings::montant_formate(),
-                ] );
-                break;
-
-            case 'paiement_recu':
-                $tag_paye = (int) PC_Settings::get( 'fluent_tag_paye', 0 );
-                $this->add_tag( $user_id, $tag_paye );
-
-                $this->fire_automation( $user_id, 'pc_paiement_confirme', [
-                    'photo_id' => $photo_id,
-                ] );
-                break;
-
             case 'au_catalogue':
                 $this->fire_automation( $user_id, 'pc_photo_au_catalogue', [
                     'photo_id' => $photo_id,
@@ -233,21 +220,33 @@ class PC_Fluent_CRM {
     }
 
     /**
-     * Génère un lien de paiement unique pour une photo retenue.
-     * À adapter selon la méthode de paiement choisie dans les settings.
+     * Webhook panier : pose le tag « payé » Fluent CRM pour le candidat + automation de confirmation.
+     *
+     * @param int $user_id
+     * @param int $tag_id   ID du tag Fluent CRM à poser (0 = pas de tag configuré)
      */
-    private function get_payment_link( int $user_id, int $photo_id ): string {
-        // Token signé valable 30 jours
-        $token = wp_create_nonce( "pc_payment_{$user_id}_{$photo_id}" );
+    public function on_paiement_panier_recu( int $user_id, int $tag_id ): void {
+        if ( $tag_id > 0 ) {
+            $this->add_tag( $user_id, $tag_id );
+        }
+        $this->fire_automation( $user_id, 'pc_paiement_confirme', [] );
+    }
 
-        $page_id = get_option( 'pc_page_espace_candidat' );
-        $base    = $page_id ? get_permalink( $page_id ) : home_url( '/' );
-
-        return add_query_arg( [
-            'pc_action'  => 'paiement',
-            'photo'      => $photo_id,
-            'token'      => $token,
-        ], $base );
+    /**
+     * Relance de paiement (J-10 / J-5 avant clôture des dépôts) : déclenche l'automation
+     * Fluent CRM `pc_relance_paiement` avec le détail du caddy. Dégradation gracieuse si absent.
+     *
+     * @param int   $user_id
+     * @param array $data  Clés : nb_non_payees, montant_du_cts, date_cloture, profil_url, rang
+     */
+    public function on_relance_paiement( int $user_id, array $data ): void {
+        $this->fire_automation( $user_id, 'pc_relance_paiement', [
+            'nb_non_payees' => (int) ( $data['nb_non_payees'] ?? 0 ),
+            'montant'       => number_format( (int) ( $data['montant_du_cts'] ?? 0 ) / 100, 2, ',', ' ' ) . ' €',
+            'date_cloture'  => (string) ( $data['date_cloture'] ?? '' ),
+            'profil_url'    => (string) ( $data['profil_url'] ?? '' ),
+            'rang'          => (int) ( $data['rang'] ?? 0 ),
+        ] );
     }
 
     // ──────────────────────────────────────────────────────────────────────

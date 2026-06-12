@@ -22,6 +22,7 @@
     selection:        new Set(),
     filtreActif:      'tous',
     dragSrcId:        null,
+    dragSrcCat:       null,
     lightboxPhotoId:  null,
     uploadCategoryId: 0,    // catégorie cible de l'upload en cours
   };
@@ -431,6 +432,7 @@
       cartes.forEach(carte => {
         carte.addEventListener('dragstart', e => {
           state.dragSrcId = carte.dataset.id;
+          state.dragSrcCat = grid.dataset.catId;
           carte.classList.add('dragging');
           e.dataTransfer.effectAllowed = 'move';
         });
@@ -474,6 +476,42 @@
 
           carte.classList.remove('drag-over');
         });
+      });
+
+      // Handlers cross-section : s'activent uniquement si la carte vient d'une autre catégorie
+      grid.addEventListener('dragover', e => {
+        if (state.dragSrcCat && state.dragSrcCat !== grid.dataset.catId) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          grid.classList.add('pc-grid--drop-target');
+        }
+      });
+      grid.addEventListener('dragleave', () => grid.classList.remove('pc-grid--drop-target'));
+      grid.addEventListener('drop', e => {
+        grid.classList.remove('pc-grid--drop-target');
+        const destCat = grid.dataset.catId;
+        if (!state.dragSrcId || !state.dragSrcCat || state.dragSrcCat === destCat) return;
+        e.preventDefault();
+        const photoId = state.dragSrcId;
+        const body = new URLSearchParams({
+          action:      'pc_change_category',
+          nonce:       CFG.nonceCategory,
+          photo_id:    photoId,
+          category_id: destCat,
+        });
+        fetch(CFG.ajaxUrl, { method: 'POST', body, credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(res => {
+            if (res && res.success) {
+              chargerPhotos();
+              toast('Photo déplacée.', 'succes');
+            } else {
+              toast((res && res.data && res.data.message) ? res.data.message : 'Déplacement impossible.', 'erreur');
+            }
+          })
+          .catch(() => toast('Erreur réseau.', 'erreur'));
+        state.dragSrcId  = null;
+        state.dragSrcCat = null;
       });
     });
   }
@@ -663,13 +701,6 @@
   // ── Sauvegarde titre inline ────────────────────────────────────────
   function sauvegarderTitre(photoId, input, txtEl) {
     const nouveauTitre = input.value.trim();
-    txtEl.textContent  = nouveauTitre || 'Sans titre';
-    txtEl.style.display = '';
-    input.style.display = 'none';
-
-    // Mise à jour locale dans state.photos
-    const photo = state.photos.find(p => String(p.id) === String(photoId));
-    if (photo) photo.titre = nouveauTitre;
 
     fetch(CFG.ajaxUrl, {
       method: 'POST',
@@ -682,8 +713,18 @@
       }),
     })
     .then(r => r.json())
-    .then(data => {
-      if (!data.success) toast('Erreur sauvegarde du titre.', 'erreur');
+    .then(res => {
+      if (res && res.success) {
+        txtEl.textContent  = res.data.titre || 'Sans titre';
+        txtEl.style.display = '';
+        input.style.display = 'none';
+        // Mise à jour locale dans state.photos
+        const photo = state.photos.find(p => String(p.id) === String(photoId));
+        if (photo) photo.titre = res.data.titre || nouveauTitre;
+      } else {
+        toast((res && res.data && res.data.message) ? res.data.message : 'Titre refusé.', 'erreur');
+        input.focus();
+      }
     })
     .catch(() => toast('Erreur réseau.', 'erreur'));
   }

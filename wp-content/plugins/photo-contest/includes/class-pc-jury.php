@@ -28,6 +28,7 @@ class PC_Jury {
         $tv = PC_Database::table( PC_Database::TABLE_VOTES );
         $tc = PC_Database::table( PC_Database::TABLE_CATEGORIES );
 
+        $tpay      = PC_Database::table( PC_Database::TABLE_PAYMENTS );
         $cat_where = $category_id > 0 ? 'AND p.category_id = %d' : '';
         $sql = "SELECT p.id, p.largeur_px, p.hauteur_px, p.ratio_type, p.taille_octets, p.statut, p.ordre_affichage,
                        p.category_id, c.nom AS nom_categorie,
@@ -35,7 +36,10 @@ class PC_Jury {
                 FROM {$tp} p
                 LEFT JOIN {$tv} v ON v.photo_id = p.id AND v.jury_user_id = %d
                 LEFT JOIN {$tc} c ON c.id = p.category_id
-                WHERE p.statut IN ('en_attente','en_examen') {$cat_where}
+                WHERE p.statut IN ('en_attente','en_examen')
+                  AND EXISTS ( SELECT 1 FROM {$tpay} pay
+                               WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )
+                  {$cat_where}
                 ORDER BY p.ordre_affichage ASC";
 
         $args = $category_id > 0 ? [ $jury_user_id, $category_id ] : [ $jury_user_id ];

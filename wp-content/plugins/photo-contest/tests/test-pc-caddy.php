@@ -69,6 +69,13 @@ assertEq( 3000, $c['montant_paye_cts'],  'montant payé' );
 assertEq( 1500, $c['montant_du_cts'],    'montant dû' );
 assertEq( 4500, $c['total_cts'],         'total' );
 
+echo "\n== get_photos_pour_jury exclut les non payées ==\n";
+// p2 non payée, p1 & p3 payées (cf. plus haut)
+$jury_ids = array_map( fn($r) => (int) $r['id'], PC_Jury::get_instance()->get_photos_pour_jury( $uid ) );
+assertTrue(  in_array( $p1, $jury_ids, true ), 'photo payée p1 visible jury' );
+assertTrue(  in_array( $p3, $jury_ids, true ), 'photo payée p3 visible jury' );
+assertFalse( in_array( $p2, $jury_ids, true ), 'photo non payée p2 exclue du jury' );
+
 // ── Nettoyage ──
 $wpdb->delete( $payments_t, [ 'user_id' => $uid ] );
 $wpdb->delete( $photos_t,   [ 'user_id' => $uid ] );

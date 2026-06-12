@@ -134,9 +134,8 @@ class PC_Jury {
         $nouveau = $nb_retenu >= $nb_refuse ? 'retenue' : 'refusee';
         PC_Photos::get_instance()->update_statut( $photo_id, $nouveau );
 
-        // Phase 2 : la cascade automatique retenue → participation_demandee est SUPPRIMÉE.
         // La photo reste en « retenue » jusqu'à la clôture admin (PC_Payments::execute_cloture),
-        // qui bascule en lot toutes les retenues et crée les paiements groupés par candidat.
+        // qui bascule en lot toutes les retenues vers au_catalogue.
 
         return [
             'nouveau_statut' => $nouveau,
@@ -166,8 +165,7 @@ class PC_Jury {
             "SELECT COUNT(*) AS total,
              SUM(statut='en_attente') AS en_attente, SUM(statut='en_examen') AS en_examen,
              SUM(statut='retenue') AS retenues, SUM(statut='refusee') AS refusees,
-             SUM(statut='participation_demandee') AS participation_demandee,
-             SUM(statut='paiement_recu') AS paiement_recu, SUM(statut='au_catalogue') AS au_catalogue
+             SUM(statut='au_catalogue') AS au_catalogue
              FROM {$tp}", ARRAY_A
         ) ?: [];
         return array_merge( $totaux, [

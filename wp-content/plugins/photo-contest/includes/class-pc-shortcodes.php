@@ -221,21 +221,10 @@ class PC_Shortcodes {
 
         // Enrichir chaque photo (URLs + flag paye)
         $photos = array_map( function ( $photo ) use ( $user_id, $payes ) {
-            $photo['url_thumb'] = $this->get_photo_url( (int) $photo['id'], 'thumb' );
-            $photo['url_full']  = $this->get_photo_url( (int) $photo['id'], 'full' );
-            $photo['paye']      = in_array( (int) $photo['id'], $payes, true );
-
-            if ( $photo['statut'] === 'participation_demandee' ) {
-                $token = wp_create_nonce( "pc_payment_{$user_id}_{$photo['id']}" );
-                $base  = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-                $photo['url_paiement'] = add_query_arg( [
-                    'pc_action' => 'paiement',
-                    'photo'     => $photo['id'],
-                    'token'     => $token,
-                ], $base );
-            } else {
-                $photo['url_paiement'] = '';
-            }
+            $photo['url_thumb']    = $this->get_photo_url( (int) $photo['id'], 'thumb' );
+            $photo['url_full']     = $this->get_photo_url( (int) $photo['id'], 'full' );
+            $photo['paye']         = in_array( (int) $photo['id'], $payes, true );
+            $photo['url_paiement'] = '';
 
             return $photo;
         }, $photos );

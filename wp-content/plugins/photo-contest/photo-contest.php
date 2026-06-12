@@ -6,7 +6,7 @@
  * Version:           2.0.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
- * Author:            Votre Nom
+ * Author:            Pierre Beaubié pour le Photo club Pavillonnais
  * Text Domain:       photo-contest
  * Domain Path:       /languages
  */
@@ -27,13 +27,11 @@ define( 'PC_ROLE_CATALOGUE', 'pc_catalogue_editor' );
 
 // Statuts des photos (slugs internes → libellés FR)
 define( 'PC_STATUTS_PHOTO', [
-    'en_attente'             => 'En attente',
-    'en_examen'              => 'En cours d\'examen',
-    'retenue'                => 'Retenue',
-    'refusee'                => 'Refusée',
-    'participation_demandee' => 'Retenue',      // alias interne — même affichage que retenue
-    'paiement_recu'          => 'Au catalogue', // alias interne
-    'au_catalogue'           => 'Au catalogue',
+    'en_attente'  => 'En attente',
+    'en_examen'   => 'En cours d\'examen',
+    'retenue'     => 'Retenue',
+    'refusee'     => 'Refusée',
+    'au_catalogue' => 'Au catalogue',
 ] );
 
 // Statuts visibles côté candidat (filtre sidebar)

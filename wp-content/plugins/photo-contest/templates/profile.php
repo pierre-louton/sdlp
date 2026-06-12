@@ -129,7 +129,7 @@ $has_pdf    = ! empty( $reglement_url );
     </section>
 
     <!-- ── Étape 2 : Règlement ───────────────────────────────────── -->
-    <?php if ( in_array( $etape, [ 'reglement_non_accepte', 'paiement_requis', 'complet' ], true ) ) : ?>
+    <?php if ( in_array( $etape, [ 'reglement_non_accepte', 'complet' ], true ) ) : ?>
     <section class="pcp-section" id="pcp-section-reglement">
       <h2 class="pcp-section__titre"><?php esc_html_e( 'Règlement du concours', PC_TEXT_DOMAIN ); ?></h2>
 

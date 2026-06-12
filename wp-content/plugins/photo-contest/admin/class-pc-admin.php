@@ -157,40 +157,6 @@ class PC_Admin {
             </tr>
         </table>
 
-        <?php
-        // ── Phase 2 : envoi emails par lots ─────────────────────────────
-        ?>
-        <h2 style="margin-top:24px"><?php esc_html_e( 'Envoi d\'emails (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
-        <table class="form-table">
-            <tr>
-                <th><label for="email_batch_size"><?php esc_html_e( 'Taille de lot', PC_TEXT_DOMAIN ); ?></label></th>
-                <td>
-                    <input type="number" min="1" max="100" id="email_batch_size" name="pc_settings[email_batch_size]"
-                           value="<?php echo esc_attr( $s['email_batch_size'] ?? 20 ); ?>" class="small-text">
-                    <p class="description"><?php esc_html_e( 'Nombre d\'emails envoyés par tick cron (1-100). Défaut : 20.', PC_TEXT_DOMAIN ); ?></p>
-                </td>
-            </tr>
-            <tr>
-                <th><label for="email_batch_interval_minutes"><?php esc_html_e( 'Intervalle (minutes)', PC_TEXT_DOMAIN ); ?></label></th>
-                <td>
-                    <input type="number" min="1" max="60" id="email_batch_interval_minutes" name="pc_settings[email_batch_interval_minutes]"
-                           value="<?php echo esc_attr( $s['email_batch_interval_minutes'] ?? 5 ); ?>" class="small-text">
-                    <p class="description">
-                        <?php
-                        $size     = (int) ( $s['email_batch_size'] ?? 20 );
-                        $itv      = (int) ( $s['email_batch_interval_minutes'] ?? 5 );
-                        $per_hour = $itv > 0 ? (int) round( $size * ( 60 / $itv ) ) : 0;
-                        printf(
-                            /* translators: %d nb emails par heure */
-                            esc_html__( 'Avec ces réglages : jusqu\'à %d emails par heure.', PC_TEXT_DOMAIN ),
-                            $per_hour
-                        );
-                        ?>
-                    </p>
-                </td>
-            </tr>
-        </table>
-
         <h2 style="margin-top:24px"><?php esc_html_e( 'Relances impayés (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
         <table class="form-table">
             <tr>
@@ -283,8 +249,6 @@ class PC_Admin {
             $clean[ $cb ] = ! empty( $clean[ $cb ] );
         }
         // Phase 2 : bornes des nouveaux réglages
-        $clean['email_batch_size']             = max( 1, min( 100, (int) ( $data['email_batch_size'] ?? 20 ) ) );
-        $clean['email_batch_interval_minutes'] = max( 1, min( 60,  (int) ( $data['email_batch_interval_minutes'] ?? 5 ) ) );
         $clean['relance_offset_1']             = max( 0, min( 60, (int) ( $data['relance_offset_1'] ?? 10 ) ) );
         $clean['relance_offset_2']             = max( 0, min( 60, (int) ( $data['relance_offset_2'] ?? 5 ) ) );
         $clean['poids_max_mo']                 = max( 1, min( 100, (int) ( $data['poids_max_mo'] ?? 40 ) ) );

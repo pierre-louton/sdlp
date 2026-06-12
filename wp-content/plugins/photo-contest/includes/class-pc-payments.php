@@ -23,6 +23,7 @@ class PC_Payments {
         add_action( 'init',                       [ $this, 'register_webhook_endpoint' ] );
         add_action( 'wp_ajax_pc_create_checkout_session', [ $this, 'ajax_create_session' ] );
         add_action( 'wp_ajax_pc_create_inscription_session', [ $this, 'ajax_create_inscription_session' ] );
+        add_action( 'wp_ajax_pc_create_caddy_session', [ $this, 'ajax_create_caddy_session' ] );
         add_action( 'wp_enqueue_scripts',         [ $this, 'maybe_enqueue_assets' ] );
         add_action( 'pc_send_payment_email_batch', [ $this, 'cron_send_batch' ] );
 
@@ -506,16 +507,16 @@ class PC_Payments {
         $table = PC_Database::table( PC_Database::TABLE_PAYMENTS );
 
         $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT id, photo_id FROM {$table}
+            "SELECT id, photo_id, user_id FROM {$table}
              WHERE payment_token = %s AND statut_paiement = 'en_attente'",
             $token
         ) );
 
         if ( empty( $rows ) ) return;
 
-        $reference = (string) ( $session->payment_intent ?? $session->id );
-        $photos    = PC_Photos::get_instance();
-
+        $reference  = (string) ( $session->payment_intent ?? $session->id );
+        $tag_paye   = (int) PC_Settings::get( 'fluent_tag_paye', 0 );
+        $first_user = 0;
         foreach ( $rows as $row ) {
             $wpdb->update(
                 $table,
@@ -526,9 +527,12 @@ class PC_Payments {
                 ],
                 [ 'id' => (int) $row->id ]
             );
+            // NE PAS changer le statut jury de la photo : elle reste en_attente, juste « payée ».
+            $first_user = (int) $row->user_id;
+        }
 
-            // Déclenche Fluent CRM + création entrée catalogue
-            $photos->update_statut( (int) $row->photo_id, 'paiement_recu' );
+        if ( $first_user > 0 ) {
+            do_action( 'pc_paiement_panier_recu', $first_user, $tag_paye );
         }
     }
 
@@ -639,6 +643,71 @@ class PC_Payments {
             'montant_du_cts'    => $nb_non_payees * $prix,
             'total_cts'         => ( $nb_payees + $nb_non_payees ) * $prix,
         ];
+    }
+
+    /**
+     * Crée une ligne de paiement `en_attente` (prix unitaire) pour chaque photo en_attente
+     * non encore payée du candidat, sous un même payment_token. Renvoie le token, ou ''
+     * s'il n'y a rien à payer.
+     */
+    public function creer_lignes_panier( int $user_id ): string {
+        global $wpdb;
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $prix       = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+        $devise     = strtoupper( (string) PC_Settings::get( 'devise', 'EUR' ) );
+
+        $photo_ids = $wpdb->get_col( $wpdb->prepare(
+            "SELECT p.id FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND NOT EXISTS ( SELECT 1 FROM {$payments_t} pay
+                                WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
+        if ( empty( $photo_ids ) ) {
+            return '';
+        }
+
+        $token = wp_generate_uuid4();
+        foreach ( $photo_ids as $pid ) {
+            // Nettoyer une éventuelle ligne en_attente orpheline (panier abandonné)
+            $wpdb->delete( $payments_t, [ 'photo_id' => (int) $pid, 'statut_paiement' => 'en_attente' ] );
+            $wpdb->insert( $payments_t, [
+                'photo_id'         => (int) $pid,
+                'user_id'          => $user_id,
+                'montant_centimes' => $prix,
+                'devise'           => $devise,
+                'statut_paiement'  => 'en_attente',
+                'methode'          => 'stripe_checkout',
+                'payment_token'    => $token,
+            ] );
+        }
+        return $token;
+    }
+
+    /**
+     * AJAX : crée les lignes panier pour le candidat courant et renvoie l'URL
+     * de l'endpoint /?pc_pay=<token> (qui ouvrira Stripe Checkout, Elementor-safe).
+     */
+    public function ajax_create_caddy_session(): void {
+        check_ajax_referer( 'pc_profile_nonce', 'nonce' );
+
+        if ( ! is_user_logged_in() || ! current_user_can( 'pc_pay_participation' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
+        }
+        if ( ! PC_Settings::is_depot_actif() ) {
+            wp_send_json_error( [ 'message' => __( 'Le dépôt est clôturé : paiement impossible.', PC_TEXT_DOMAIN ) ] );
+        }
+        if ( ! $this->is_configured() ) {
+            wp_send_json_error( [ 'message' => __( 'Stripe n\'est pas configuré.', PC_TEXT_DOMAIN ) ] );
+        }
+
+        $token = $this->creer_lignes_panier( get_current_user_id() );
+        if ( $token === '' ) {
+            wp_send_json_error( [ 'message' => __( 'Aucune photo à payer.', PC_TEXT_DOMAIN ) ] );
+        }
+
+        wp_send_json_success( [ 'url' => home_url( '/?pc_pay=' . rawurlencode( $token ) ) ] );
     }
 
     // ── Clôture jury (Phase 2) ────────────────────────────────────────

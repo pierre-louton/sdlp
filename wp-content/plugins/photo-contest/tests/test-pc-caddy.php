@@ -76,6 +76,20 @@ assertTrue(  in_array( $p1, $jury_ids, true ), 'photo payée p1 visible jury' );
 assertTrue(  in_array( $p3, $jury_ids, true ), 'photo payée p3 visible jury' );
 assertFalse( in_array( $p2, $jury_ids, true ), 'photo non payée p2 exclue du jury' );
 
+echo "\n== creer_lignes_panier ==\n";
+// État courant : p1, p3 payées ; p2 non payée. On ajoute p4, p5 non payées.
+$p4 = $mk_photo(); $p5 = $mk_photo();
+$token = $pay->creer_lignes_panier( $uid );
+assertTrue( is_string( $token ) && strlen( $token ) === 36, 'token UUID renvoyé' );
+$lignes = (int) $wpdb->get_var( $wpdb->prepare(
+    "SELECT COUNT(*) FROM {$payments_t} WHERE payment_token = %s AND statut_paiement = 'en_attente'", $token ) );
+assertEq( 3, $lignes, '3 lignes en_attente (p2, p4, p5) sous le token' );
+$dup = (int) $wpdb->get_var( $wpdb->prepare(
+    "SELECT COUNT(*) FROM {$payments_t} WHERE payment_token = %s AND photo_id = %d", $token, $p1 ) );
+assertEq( 0, $dup, 'pas de ligne pour une photo déjà payée' );
+$wpdb->update( $payments_t, [ 'statut_paiement' => 'paiement_recu' ], [ 'payment_token' => $token ] );
+assertEq( '', $pay->creer_lignes_panier( $uid ), 'plus rien à payer -> vide' );
+
 // ── Nettoyage ──
 $wpdb->delete( $payments_t, [ 'user_id' => $uid ] );
 $wpdb->delete( $photos_t,   [ 'user_id' => $uid ] );

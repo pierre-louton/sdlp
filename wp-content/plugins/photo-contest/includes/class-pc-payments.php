@@ -630,7 +630,7 @@ class PC_Payments {
      *  2. Refus en lot des photos restantes en délibération
      *  3. Pour chaque candidat à photos retenues : génération d'un payment_token, bascule vers
      *     participation_demandee, INSERT dans wp_pc_payments (1 ligne par photo)
-     *  4. Bascule des flags (jury_actif=false, cloture_effectuee_at=time())
+     *  4. Bascule des flags (jury_actif=false, catalogue_actif=true, cloture_effectuee_at=time())
      *  5. Planification du 1er tick cron d'envoi d'emails
      *  6. do_action( 'pc_cloture_jury_effectuee' )
      *
@@ -689,6 +689,7 @@ class PC_Payments {
 
         // 4. Bascule des flags
         PC_Settings::set( 'jury_actif',           false );
+        PC_Settings::set( 'catalogue_actif',      true );   // ouverture auto du catalogue
         PC_Settings::set( 'cloture_en_cours',     0 );
         PC_Settings::set( 'cloture_effectuee_at', time() );
 

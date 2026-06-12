@@ -97,8 +97,8 @@ public static function is_depot_actif(): bool {
 }
 ```
 
-**Nouveau helper privé `date_to_ts()`** — parse une date stockée en timestamp, ou
-`null` si vide/invalide :
+**Nouveau helper privé `date_to_ts()`** — convertit une date stockée (heure locale du
+site, sans fuseau) en timestamp epoch UTC, ou `null` si vide/invalide :
 
 ```php
 private static function date_to_ts( mixed $value ): ?int {
@@ -106,14 +106,25 @@ private static function date_to_ts( mixed $value ): ?int {
     if ( $value === '' ) {
         return null;
     }
-    $ts = strtotime( $value );
-    return $ts === false ? null : $ts;
+    try {
+        // La chaîne stockée est une heure « murale » du fuseau du site WordPress.
+        // On l'ancre sur wp_timezone() (jamais sur l'horloge du serveur) pour obtenir
+        // un instant absolu comparable à time().
+        $dt = new DateTimeImmutable( $value, wp_timezone() );
+        return $dt->getTimestamp();
+    } catch ( Exception $e ) {
+        return null;
+    }
 }
 ```
 
-> Convention timezone : on suit la règle du CLAUDE.md — comparaison `time()` vs
-> `strtotime($date)` côté PHP, jamais en SQL. `strtotime()` et `time()` sont cohérents
-> entre eux (même fuseau PHP).
+> **Convention timezone (CRITIQUE — serveurs à fuseaux différents).** Laragon (dev) et
+> O2Switch (prod) n'ont pas la même heure système. On n'utilise **jamais** `strtotime()`
+> ni `date()` nus (qui dépendent du fuseau par défaut de PHP) ni de comparaison SQL.
+> On ancre toujours sur **`wp_timezone()`** (le fuseau configuré dans Réglages →
+> Général, ex. `Europe/Paris`) et on compare le timestamp absolu obtenu à **`time()`**
+> (epoch UTC). Ainsi la deadline se déclenche au même instant réel quel que soit le
+> serveur. Cela précise/remplace la règle simplifiée « strtotime + time » du CLAUDE.md.
 
 ### 2. `admin/class-pc-admin.php`
 
@@ -123,8 +134,10 @@ champs `datetime-local` :
 - `date_ouverture` — « Date et heure d'ouverture du dépôt »
 - `date_fermeture_depot` — « Date et heure de clôture du dépôt »
 
-La valeur affichée doit être convertie au format attendu par `datetime-local`
-(`Y-m-d\TH:i`) à partir de la valeur stockée.
+La valeur stockée étant déjà une heure « murale » du fuseau du site, on l'affiche
+directement au format `datetime-local` (`Y-m-d\TH:i`) sans aucune conversion de fuseau
+(ex. via `DateTimeImmutable($val, wp_timezone())->format('Y-m-d\TH:i')`, ou un simple
+reformatage de la chaîne). **Pas de décalage de fuseau à l'affichage.**
 
 **Ré-étiquetage de la case `jury_actif`** dans la liste des cases à cocher :
 > « Forcer l'ouverture du jury (sinon automatique à la clôture du dépôt) »
@@ -136,9 +149,11 @@ automatique dès la date de clôture du dépôt. »
 **`save_settings()`** — normaliser les deux dates en `Y-m-d H:i:s` :
 
 - Champ vide → on stocke une chaîne vide (pas de date = pas de contrainte).
-- Champ rempli → `date('Y-m-d H:i:s', strtotime($valeur))` (heure locale, **cohérente
-  avec la lecture** qui repasse par `strtotime()`) ; chaîne vide si `strtotime()` échoue.
-  Ne **pas** utiliser `gmdate()`, qui décalerait vers UTC et casserait la comparaison.
+- Champ rempli → on conserve l'heure « murale » saisie, normalisée en `Y-m-d H:i:s`
+  via `DateTimeImmutable($valeur, wp_timezone())->format('Y-m-d H:i:s')` ; chaîne vide
+  si le parsing échoue. La valeur stockée n'est **pas** convertie en UTC : c'est une
+  heure du fuseau du site, ré-ancrée sur `wp_timezone()` à la lecture par `date_to_ts()`.
+  Ne **pas** utiliser `gmdate()` ni `strtotime()` nus (dépendants du fuseau serveur).
 
 > Les cases à cocher `depot_actif`, `jury_actif`, `catalogue_actif` continuent d'être
 > traitées comme aujourd'hui (booléen). Aucun changement de mécanique de sauvegarde
@@ -217,8 +232,11 @@ Mettre à jour le bloc de commentaire de tête de la méthode (étape 4) pour me
 4. **Verrou post-clôture** : lancer `execute_cloture()` → jury verrouillé même si la
    date est passée, `catalogue_actif` à true → catalogue accessible.
 5. **Override test** : cocher `jury_actif` après clôture → jury de nouveau accessible.
-6. **Régression timezone** : vérifier que les comparaisons fonctionnent en local
-   Laragon (PHP local / MySQL UTC) — aucune requête SQL sur les dates.
+6. **Régression timezone (serveurs à fuseaux différents)** : régler Réglages → Général
+   sur `Europe/Paris`. Vérifier qu'une date de clôture saisie à `23:59` déclenche la
+   bascule à 23:59 heure de Paris — pas à l'heure système du serveur (Laragon ≠
+   O2Switch). Test concret : changer temporairement le fuseau PHP du serveur et
+   confirmer que la deadline ne bouge pas. Aucune requête SQL sur les dates.
 
 ## Fichiers touchés
 

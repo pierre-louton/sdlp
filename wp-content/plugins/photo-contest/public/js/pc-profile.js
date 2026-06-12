@@ -19,6 +19,8 @@
       const fd = new FormData(formProfil);
       fd.append('action', 'pc_save_profile');
       fd.append('nonce',  CFG.nonceSave);
+      const optin = document.getElementById('pcp-optin');
+      fd.set('opt_in_prochain', optin && optin.checked ? '1' : '0');
 
       fetch(CFG.ajaxUrl, { method: 'POST', body: fd })
         .then(r => r.json())

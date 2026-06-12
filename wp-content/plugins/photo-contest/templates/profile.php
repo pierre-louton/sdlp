@@ -120,6 +120,16 @@ $has_pdf    = ! empty( $reglement_url );
           <span class="pcp-email-val"><?php echo esc_html( $user->user_email ); ?></span>
         </div>
 
+        <label class="pcp-optin">
+          <input type="checkbox" id="pcp-optin" name="opt_in_prochain" value="1"
+                 <?php checked( ! empty( $profile['opt_in_prochain'] ) ); ?>>
+          <span><?php esc_html_e( 'Je souhaite être prévenu(e) du prochain concours à cette adresse email.', PC_TEXT_DOMAIN ); ?></span>
+        </label>
+
+        <?php $rgpd = PC_Settings::get( 'rgpd_texte', '' ); if ( $rgpd !== '' ) : ?>
+          <p class="pcp-rgpd"><?php echo wp_kses_post( $rgpd ); ?></p>
+        <?php endif; ?>
+
         <button class="pcp-btn pcp-btn--primary" type="submit" id="pcp-btn-save">
           <?php echo $etape === 'profil_incomplet'
             ? esc_html__( 'Enregistrer et continuer', PC_TEXT_DOMAIN )

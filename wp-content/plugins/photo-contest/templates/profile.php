@@ -33,9 +33,8 @@ $has_pdf    = ! empty( $reglement_url );
     $etapes = [
       ['profil',    __( 'Profil', PC_TEXT_DOMAIN )],
       ['reglement', __( 'Règlement', PC_TEXT_DOMAIN )],
-      ['paiement',  __( 'Participation', PC_TEXT_DOMAIN )],
     ];
-    $ordre = ['email_non_verifie'=>0,'profil_incomplet'=>1,'reglement_non_accepte'=>2,'paiement_requis'=>3,'complet'=>4];
+    $ordre = ['email_non_verifie'=>0,'profil_incomplet'=>1,'reglement_non_accepte'=>2,'complet'=>3];
     $actuel = $ordre[$etape] ?? 0;
     foreach ( $etapes as $i => [$slug, $label] ) :
       $idx = $i + 1;
@@ -121,6 +120,16 @@ $has_pdf    = ! empty( $reglement_url );
           <span class="pcp-email-val"><?php echo esc_html( $user->user_email ); ?></span>
         </div>
 
+        <label class="pcp-optin">
+          <input type="checkbox" id="pcp-optin" name="opt_in_prochain" value="1"
+                 <?php checked( ! empty( $profile['opt_in_prochain'] ) ); ?>>
+          <span><?php esc_html_e( 'Je souhaite être prévenu(e) du prochain concours à cette adresse email.', PC_TEXT_DOMAIN ); ?></span>
+        </label>
+
+        <?php $rgpd = PC_Settings::get( 'rgpd_texte', '' ); if ( $rgpd !== '' ) : ?>
+          <p class="pcp-rgpd"><?php echo wp_kses_post( $rgpd ); ?></p>
+        <?php endif; ?>
+
         <button class="pcp-btn pcp-btn--primary" type="submit" id="pcp-btn-save">
           <?php echo $etape === 'profil_incomplet'
             ? esc_html__( 'Enregistrer et continuer', PC_TEXT_DOMAIN )
@@ -130,7 +139,7 @@ $has_pdf    = ! empty( $reglement_url );
     </section>
 
     <!-- ── Étape 2 : Règlement ───────────────────────────────────── -->
-    <?php if ( in_array( $etape, [ 'reglement_non_accepte', 'paiement_requis', 'complet' ], true ) ) : ?>
+    <?php if ( in_array( $etape, [ 'reglement_non_accepte', 'complet' ], true ) ) : ?>
     <section class="pcp-section" id="pcp-section-reglement">
       <h2 class="pcp-section__titre"><?php esc_html_e( 'Règlement du concours', PC_TEXT_DOMAIN ); ?></h2>
 
@@ -190,37 +199,47 @@ $has_pdf    = ! empty( $reglement_url );
     </section>
     <?php endif; ?>
 
-    <!-- ── Étape 3 : Paiement inscription ───────────────────────── -->
-    <?php if ( in_array( $etape, [ 'paiement_requis', 'complet' ], true ) ) : ?>
-    <section class="pcp-section" id="pcp-section-paiement">
-      <h2 class="pcp-section__titre"><?php esc_html_e( 'Participation au concours', PC_TEXT_DOMAIN ); ?></h2>
+    <!-- ── Caddy : paiement des photos ──────────────────────────────── -->
+    <?php if ( $etape === 'complet' ) :
+      $prix_fmt = number_format( $caddy['prix_unitaire_cts'] / 100, 2, ',', ' ' ) . ' €';
+      $du_fmt   = number_format( $caddy['montant_du_cts']    / 100, 2, ',', ' ' ) . ' €';
+      $paye_fmt = number_format( $caddy['montant_paye_cts']  / 100, 2, ',', ' ' ) . ' €';
+    ?>
+    <section class="pcp-section" id="pcp-section-caddy">
+      <h2 class="pcp-section__titre"><?php esc_html_e( 'Paiement de mes photos', PC_TEXT_DOMAIN ); ?></h2>
+      <p class="pcp-paiement-desc">
+        <?php printf(
+          esc_html__( 'Chaque photo coûte %s. Une photo doit être payée avant la clôture des dépôts pour être examinée par le jury.', PC_TEXT_DOMAIN ),
+          '<strong>' . esc_html( $prix_fmt ) . '</strong>'
+        ); ?>
+      </p>
+      <table class="pcp-caddy">
+        <tr><th><?php esc_html_e( 'Photos payées', PC_TEXT_DOMAIN ); ?></th>
+            <td><?php echo (int) $caddy['nb_payees']; ?> — <?php echo esc_html( $paye_fmt ); ?></td></tr>
+        <tr><th><?php esc_html_e( 'Reste à payer', PC_TEXT_DOMAIN ); ?></th>
+            <td><strong><?php echo (int) $caddy['nb_non_payees']; ?> — <?php echo esc_html( $du_fmt ); ?></strong></td></tr>
+      </table>
 
-      <?php if ( $etape === 'complet' ) : ?>
-        <div class="pcp-notice pcp-notice--succes">
-          <?php esc_html_e( 'Participation confirmée — vous pouvez déposer vos photos.', PC_TEXT_DOMAIN ); ?>
-          <br>
-          <a href="<?php echo esc_url( $espace_url ); ?>" class="pcp-btn pcp-btn--outline" style="margin-top:14px;display:inline-block;">
-            <?php esc_html_e( 'Accéder à mon espace galerie →', PC_TEXT_DOMAIN ); ?>
-          </a>
+      <div id="pcp-caddy-msg"></div>
+
+      <?php if ( ! $depot_actif_now ) : ?>
+        <div class="pcp-notice pcp-notice--info">
+          <?php esc_html_e( 'Le dépôt est clôturé : le paiement n\'est plus possible.', PC_TEXT_DOMAIN ); ?>
         </div>
-      <?php else : ?>
-        <p class="pcp-paiement-desc">
-          <?php printf(
-            esc_html__( 'Pour finaliser votre inscription, un règlement de %s est demandé.', PC_TEXT_DOMAIN ),
-            '<strong>' . esc_html( $montant ) . '</strong>'
-          ); ?>
-        </p>
-        <?php if ( PC_Settings::get( 'stripe_mode', 'test' ) === 'test' ) : ?>
-          <div class="pcp-notice pcp-notice--info">
-            <?php esc_html_e( 'Mode test Stripe actif — aucun débit réel.', PC_TEXT_DOMAIN ); ?>
-          </div>
-        <?php endif; ?>
-        <div id="pcp-paiement-msg"></div>
-        <button class="pcp-btn pcp-btn--gold" id="pcp-btn-paiement">
-          <span class="pcp-btn__txt"><?php printf( esc_html__( 'Payer %s', PC_TEXT_DOMAIN ), esc_html( $montant ) ); ?></span>
+      <?php elseif ( $caddy['nb_non_payees'] > 0 ) : ?>
+        <button class="pcp-btn pcp-btn--gold" id="pcp-btn-caddy">
+          <span class="pcp-btn__txt"><?php printf( esc_html__( 'Payer mes %1$d photo(s) — %2$s', PC_TEXT_DOMAIN ), (int) $caddy['nb_non_payees'], esc_html( $du_fmt ) ); ?></span>
           <span class="pcp-btn__spinner"></span>
         </button>
+      <?php else : ?>
+        <div class="pcp-notice pcp-notice--succes">
+          <?php esc_html_e( 'Toutes vos photos déposées sont payées.', PC_TEXT_DOMAIN ); ?>
+        </div>
       <?php endif; ?>
+
+      <a href="<?php echo esc_url( $espace_url ); ?>" class="pcp-btn pcp-btn--outline" style="margin-top:14px;display:inline-block;">
+        <?php esc_html_e( 'Accéder à mon espace galerie →', PC_TEXT_DOMAIN ); ?>
+      </a>
     </section>
     <?php endif; ?>
 

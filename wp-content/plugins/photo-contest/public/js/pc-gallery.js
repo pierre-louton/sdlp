@@ -22,6 +22,7 @@
     selection:        new Set(),
     filtreActif:      'tous',
     dragSrcId:        null,
+    dragSrcCat:       null,
     lightboxPhotoId:  null,
     uploadCategoryId: 0,    // catégorie cible de l'upload en cours
   };
@@ -147,7 +148,6 @@
 
     const labelStatut  = STATUTS_LABELS[photo.statut] || photo.statut;
     const peutSuppr    = ['en_attente', 'refusee'].includes(photo.statut);
-    const peutPayer    = photo.statut === 'participation_demandee' && photo.url_paiement;
     const urlThumb     = photo.url_thumb;
 
     div.innerHTML = `
@@ -171,19 +171,7 @@
                 data-action="voir" data-id="${photo.id}">Voir</button>
         ${peutSuppr ? `<button class="pc-card__action-btn pc-card__action-btn--suppr"
                 data-action="supprimer" data-id="${photo.id}">Supprimer</button>` : ''}
-        ${peutPayer ? `<a class="pc-card__action-btn pc-card__action-btn--payer"
-                href="${escHTML(photo.url_paiement)}">Payer</a>` : ''}
       </div>`;
-
-    if ( peutPayer ) {
-      div.classList.add('pc-card--paiement-requis');
-      const actions = div.querySelector('.pc-card__actions');
-      if (actions) {
-        actions.style.opacity = '1';
-        actions.style.transform = 'translateY(0)';
-        actions.style.pointerEvents = 'auto';
-      }
-    }
 
     // Lazy load avec fade-in
     const img = div.querySelector('.pc-card__img');
@@ -208,6 +196,14 @@
       });
       titreInput.addEventListener('click', e => e.stopPropagation());
     }
+
+    // Badge payée / non payée
+    var badge = document.createElement('span');
+    badge.className = 'pc-pay-badge ' + (photo.paye ? 'pc-pay-badge--ok' : 'pc-pay-badge--ko');
+    badge.textContent = photo.paye
+      ? 'payée'
+      : (CFG.depotActif ? 'non payée' : 'non payée — non examinée');
+    div.appendChild(badge);
 
     // Sélection par clic
     div.addEventListener('click', e => {
@@ -436,6 +432,7 @@
       cartes.forEach(carte => {
         carte.addEventListener('dragstart', e => {
           state.dragSrcId = carte.dataset.id;
+          state.dragSrcCat = grid.dataset.catId;
           carte.classList.add('dragging');
           e.dataTransfer.effectAllowed = 'move';
         });
@@ -479,6 +476,42 @@
 
           carte.classList.remove('drag-over');
         });
+      });
+
+      // Handlers cross-section : s'activent uniquement si la carte vient d'une autre catégorie
+      grid.addEventListener('dragover', e => {
+        if (state.dragSrcCat && state.dragSrcCat !== grid.dataset.catId) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          grid.classList.add('pc-grid--drop-target');
+        }
+      });
+      grid.addEventListener('dragleave', () => grid.classList.remove('pc-grid--drop-target'));
+      grid.addEventListener('drop', e => {
+        grid.classList.remove('pc-grid--drop-target');
+        const destCat = grid.dataset.catId;
+        if (!state.dragSrcId || !state.dragSrcCat || state.dragSrcCat === destCat) return;
+        e.preventDefault();
+        const photoId = state.dragSrcId;
+        const body = new URLSearchParams({
+          action:      'pc_change_category',
+          nonce:       CFG.nonceCategory,
+          photo_id:    photoId,
+          category_id: destCat,
+        });
+        fetch(CFG.ajaxUrl, { method: 'POST', body, credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(res => {
+            if (res && res.success) {
+              chargerPhotos();
+              toast('Photo déplacée.', 'succes');
+            } else {
+              toast((res && res.data && res.data.message) ? res.data.message : 'Déplacement impossible.', 'erreur');
+            }
+          })
+          .catch(() => toast('Erreur réseau.', 'erreur'));
+        state.dragSrcId  = null;
+        state.dragSrcCat = null;
       });
     });
   }
@@ -656,13 +689,11 @@
   // ── Couleur de point filtre sidebar ───────────────────────────────
   function couleurStatut(slug) {
     const map = {
-      en_attente:             '#4a7fa5',
-      en_examen:              '#c49a3c',
-      retenue:                '#4da876',
-      refusee:                '#b05050',
-      participation_demandee: '#9a6ec4',
-      paiement_recu:          '#4da876',
-      au_catalogue:           '#c49a3c',
+      en_attente:   '#4a7fa5',
+      en_examen:    '#c49a3c',
+      retenue:      '#4da876',
+      refusee:      '#b05050',
+      au_catalogue: '#c49a3c',
     };
     return map[slug] || '#555450';
   }
@@ -670,13 +701,6 @@
   // ── Sauvegarde titre inline ────────────────────────────────────────
   function sauvegarderTitre(photoId, input, txtEl) {
     const nouveauTitre = input.value.trim();
-    txtEl.textContent  = nouveauTitre || 'Sans titre';
-    txtEl.style.display = '';
-    input.style.display = 'none';
-
-    // Mise à jour locale dans state.photos
-    const photo = state.photos.find(p => String(p.id) === String(photoId));
-    if (photo) photo.titre = nouveauTitre;
 
     fetch(CFG.ajaxUrl, {
       method: 'POST',
@@ -689,8 +713,18 @@
       }),
     })
     .then(r => r.json())
-    .then(data => {
-      if (!data.success) toast('Erreur sauvegarde du titre.', 'erreur');
+    .then(res => {
+      if (res && res.success) {
+        txtEl.textContent  = res.data.titre || 'Sans titre';
+        txtEl.style.display = '';
+        input.style.display = 'none';
+        // Mise à jour locale dans state.photos
+        const photo = state.photos.find(p => String(p.id) === String(photoId));
+        if (photo) photo.titre = res.data.titre || nouveauTitre;
+      } else {
+        toast((res && res.data && res.data.message) ? res.data.message : 'Titre refusé.', 'erreur');
+        input.focus();
+      }
     })
     .catch(() => toast('Erreur réseau.', 'erreur'));
   }

@@ -4,7 +4,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Module Paiements — Stripe Checkout.
  *
- * Flux : page de paiement → Session Checkout → webhook → update_statut('paiement_recu')
+ * Flux : caddy profil → endpoint /?pc_pay=<token> → Stripe Checkout → webhook → lignes paiement_recu
+ * (le statut jury de la photo n'est PAS modifié par le paiement)
  * Webhook URL : <home_url>/?pc_stripe_webhook=1
  * Prérequis  : composer require stripe/stripe-php
  */
@@ -18,13 +19,8 @@ class PC_Payments {
     }
 
     private function __construct() {
-        add_action( 'template_redirect',          [ $this, 'handle_payment_page' ] );
-        add_action( 'template_redirect',          [ $this, 'handle_stripe_return' ] );
         add_action( 'init',                       [ $this, 'register_webhook_endpoint' ] );
-        add_action( 'wp_ajax_pc_create_checkout_session', [ $this, 'ajax_create_session' ] );
-        add_action( 'wp_ajax_pc_create_inscription_session', [ $this, 'ajax_create_inscription_session' ] );
-        add_action( 'wp_enqueue_scripts',         [ $this, 'maybe_enqueue_assets' ] );
-        add_action( 'pc_send_payment_email_batch', [ $this, 'cron_send_batch' ] );
+        add_action( 'wp_ajax_pc_create_caddy_session', [ $this, 'ajax_create_caddy_session' ] );
 
         // Phase 2 : relances quotidiennes des paiements impayés
         add_action( 'pc_relance_impayes_daily', [ $this, 'cron_relances_quotidiennes' ] );
@@ -184,238 +180,6 @@ class PC_Payments {
         exit;
     }
 
-    // ── Page de paiement ──────────────────────────────────────────────
-
-    public function handle_payment_page(): void {
-        if ( ! is_user_logged_in() ) return;
-        if ( ( $_GET['pc_action'] ?? '' ) !== 'paiement' ) return;
-
-        $photo_id = (int) ( $_GET['photo'] ?? 0 );
-        $token    = sanitize_text_field( $_GET['token'] ?? '' );
-        $user_id  = get_current_user_id();
-
-        if ( ! $photo_id || ! wp_verify_nonce( $token, "pc_payment_{$user_id}_{$photo_id}" ) )
-            wp_die( esc_html__( 'Lien de paiement invalide ou expiré.', 'photo-contest' ) );
-
-        $photo = PC_Photos::get_instance()->get_photo( $photo_id, $user_id );
-        if ( ! $photo || ! in_array( $photo['statut'], [ 'participation_demandee', 'paiement_recu', 'au_catalogue' ], true ) )
-            wp_die( esc_html__( 'Photo introuvable ou non éligible.', 'photo-contest' ) );
-
-        $this->render_payment_page( $photo, $user_id );
-    }
-
-    private function render_payment_page( array $photo, int $user_id ): void {
-        $paiement    = $this->get_paiement_by_photo( (int) $photo['id'] );
-        $montant_cts = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
-        $devise      = PC_Settings::get( 'devise', 'EUR' );
-        $mode_test   = PC_Settings::get( 'stripe_mode', 'test' ) === 'test';
-        $stripe_pub  = PC_Settings::get( 'stripe_publishable_key', '' );
-        $retour_url  = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-
-        wp_enqueue_style( 'pc-payment', PC_PLUGIN_URL . 'public/css/pc-payment.css', [], PC_VERSION . '.2' );
-        extract( compact( 'photo', 'paiement', 'montant_cts', 'devise', 'mode_test', 'stripe_pub', 'retour_url' ) );
-        get_header();
-        include PC_PLUGIN_DIR . 'templates/payment.php';
-        get_footer();
-        exit;
-    }
-
-    public function handle_stripe_return(): void {
-        if ( ! is_user_logged_in() ) return;
-        $action = sanitize_key( $_GET['pc_stripe'] ?? '' );
-        if ( ! in_array( $action, [ 'success', 'cancel', 'inscription_ok', 'inscription_cancel' ], true ) ) return;
-
-        $photo_id   = (int) ( $_GET['photo'] ?? 0 );
-        $user_id    = get_current_user_id();
-        $retour_url = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-
-        $profil_url = get_permalink( get_option( 'pc_page_profil' ) ) ?: home_url( '/' );
-
-        wp_enqueue_style( 'pc-payment', PC_PLUGIN_URL . 'public/css/pc-payment.css', [], PC_VERSION . '.2' );
-        get_header();
-
-        if ( $action === 'inscription_ok' ) {
-            // Paiement inscription réussi
-            $montant_fmt = PC_Settings::montant_formate();
-            $paiement    = null;
-            $photo       = null;
-            extract( compact( 'montant_fmt', 'retour_url' ) );
-            include PC_PLUGIN_DIR . 'templates/payment-success.php';
-
-        } elseif ( $action === 'inscription_cancel' ) {
-            // Paiement inscription annulé — retry vers le profil
-            $photo     = null;
-            $retry_url = $profil_url;
-            extract( compact( 'photo', 'retour_url', 'retry_url' ) );
-            include PC_PLUGIN_DIR . 'templates/payment-cancel.php';
-
-        } elseif ( $action === 'success' ) {
-            $photo       = $photo_id ? PC_Photos::get_instance()->get_photo( $photo_id, $user_id ) : null;
-            $paiement    = $photo_id ? $this->get_paiement_by_photo( $photo_id ) : null;
-            $montant_fmt = PC_Settings::montant_formate();
-            extract( compact( 'photo', 'paiement', 'montant_fmt', 'retour_url' ) );
-            include PC_PLUGIN_DIR . 'templates/payment-success.php';
-
-        } else {
-            $photo     = $photo_id ? PC_Photos::get_instance()->get_photo( $photo_id, $user_id ) : null;
-            $token     = wp_create_nonce( "pc_payment_{$user_id}_{$photo_id}" );
-            $retry_url = add_query_arg( [ 'pc_action' => 'paiement', 'photo' => $photo_id, 'token' => $token ], $retour_url );
-            extract( compact( 'photo', 'retour_url', 'retry_url' ) );
-            include PC_PLUGIN_DIR . 'templates/payment-cancel.php';
-        }
-
-        get_footer();
-        exit;
-    }
-
-    // ── Paiement d'inscription ────────────────────────────────────────
-
-    /**
-     * Crée une Session Stripe Checkout pour le paiement d'inscription.
-     * Appelé depuis PC_Profile après acceptation du règlement.
-     */
-    public function creer_session_inscription( int $user_id ): string|false {
-        if ( ! $this->load_stripe() ) return false;
-
-        try {
-            $montant_cts  = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
-            $devise       = strtolower( PC_Settings::get( 'devise', 'EUR' ) );
-            $nom_concours = PC_Settings::get( 'nom_concours', 'SDLP' );
-            $user         = get_userdata( $user_id );
-            $base         = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-
-            $success_url = add_query_arg( [ 'pc_stripe' => 'inscription_ok', 'session_id' => '{CHECKOUT_SESSION_ID}' ], $base );
-            $cancel_url  = add_query_arg( [ 'pc_stripe' => 'inscription_cancel' ], $base );
-
-            $session = \Stripe\Checkout\Session::create( [
-                'mode'           => 'payment',
-                'currency'       => $devise,
-                'line_items'     => [ [
-                    'price_data' => [
-                        'currency'     => $devise,
-                        'unit_amount'  => $montant_cts,
-                        'product_data' => [
-                            'name'        => sprintf( '%s — Participation candidat', $nom_concours ),
-                            'description' => __( 'Frais de participation au concours photo', PC_TEXT_DOMAIN ),
-                        ],
-                    ],
-                    'quantity' => 1,
-                ] ],
-                'customer_email' => $user->user_email,
-                'metadata'       => [
-                    'pc_user_id' => $user_id,
-                    'pc_type'    => 'inscription',
-                    'pc_plugin'  => 'photo-contest',
-                ],
-                'success_url' => $success_url,
-                'cancel_url'  => $cancel_url,
-                'locale'      => 'fr',
-            ] );
-
-            return $session->id;
-
-        } catch ( \Stripe\Exception\ApiErrorException $e ) {
-            error_log( 'PC_Payments::creer_session_inscription error: ' . $e->getMessage() );
-            return false;
-        }
-    }
-
-    public function ajax_create_inscription_session(): void {
-        check_ajax_referer( 'pc_profile_nonce', 'nonce' );
-
-        if ( ! is_user_logged_in() || ! current_user_can( 'read' ) ) {
-            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
-        }
-
-        $user_id  = get_current_user_id();
-        $session_id = $this->creer_session_inscription( $user_id );
-
-        if ( ! $session_id ) {
-            wp_send_json_error( [ 'message' => __( 'Erreur Stripe — vérifiez la configuration.', PC_TEXT_DOMAIN ) ] );
-        }
-
-        // Retourner l'URL Stripe Checkout directement
-        try {
-            $this->load_stripe();
-            $session = \Stripe\Checkout\Session::retrieve( $session_id );
-            wp_send_json_success( [ 'url' => $session->url ] );
-        } catch ( \Exception $e ) {
-            wp_send_json_error( [ 'message' => $e->getMessage() ] );
-        }
-    }
-
-    // ── Création session Stripe Checkout impression ───────────────────
-
-    public function ajax_create_session(): void {
-        check_ajax_referer( 'pc_checkout_nonce', 'nonce' );
-
-        if ( ! is_user_logged_in() || ! current_user_can( 'pc_pay_participation' ) )
-            wp_send_json_error( [ 'message' => __( 'Non autorisé.', 'photo-contest' ) ] );
-
-        if ( ! $this->is_configured() )
-            wp_send_json_error( [ 'message' => __( 'Stripe n\'est pas configuré.', 'photo-contest' ) ] );
-
-        $photo_id = (int) ( $_POST['photo_id'] ?? 0 );
-        $user_id  = get_current_user_id();
-
-        if ( ! $photo_id ) wp_send_json_error( [ 'message' => __( 'Photo invalide.', 'photo-contest' ) ] );
-
-        $photo = PC_Photos::get_instance()->get_photo( $photo_id, $user_id );
-        if ( ! $photo || ! in_array( $photo['statut'], [ 'participation_demandee', 'retenue' ], true ) )
-            wp_send_json_error( [ 'message' => __( 'Photo non éligible.', 'photo-contest' ) ] );
-
-        $pmt_existant = $this->get_paiement_by_photo( $photo_id );
-        if ( $pmt_existant && $pmt_existant['statut_paiement'] === 'paiement_recu' )
-            wp_send_json_error( [ 'message' => __( 'Cette photo a déjà été payée.', 'photo-contest' ) ] );
-
-        if ( ! $this->load_stripe() )
-            wp_send_json_error( [ 'message' => __( 'Erreur initialisation Stripe.', 'photo-contest' ) ] );
-
-        try {
-            $montant_cts  = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
-            $devise       = strtolower( PC_Settings::get( 'devise', 'EUR' ) );
-            $nom_concours = PC_Settings::get( 'nom_concours', 'Concours Photo' );
-            $user         = get_userdata( $user_id );
-            $base         = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-
-            $success_url = add_query_arg( [ 'pc_stripe' => 'success', 'photo' => $photo_id, 'session_id' => '{CHECKOUT_SESSION_ID}' ], $base );
-            $cancel_url  = add_query_arg( [ 'pc_stripe' => 'cancel',  'photo' => $photo_id ], $base );
-
-            $session = \Stripe\Checkout\Session::create( [
-                'mode'           => 'payment',
-                'currency'       => $devise,
-                'line_items'     => [ [
-                    'price_data' => [
-                        'currency'     => $devise,
-                        'unit_amount'  => $montant_cts,
-                        'product_data' => [
-                            'name'        => sprintf( '%s — Photo #%s', $nom_concours, str_pad( $photo_id, 5, '0', STR_PAD_LEFT ) ),
-                            'description' => __( 'Participation à l\'impression pour l\'exposition', 'photo-contest' ),
-                        ],
-                    ],
-                    'quantity' => 1,
-                ] ],
-                'customer_email' => $user->user_email,
-                'metadata'       => [ 'pc_photo_id' => $photo_id, 'pc_user_id' => $user_id, 'pc_plugin' => 'photo-contest' ],
-                'success_url'    => $success_url,
-                'cancel_url'     => $cancel_url,
-                'locale'         => 'fr',
-            ] );
-
-            // Enregistrement en attente
-            $this->upsert_paiement( $photo_id, $user_id, $montant_cts, strtoupper( $devise ), [
-                'statut_paiement'   => 'en_attente',
-                'reference_externe' => $session->id,
-                'methode'           => 'stripe_checkout',
-            ] );
-
-            wp_send_json_success( [ 'session_id' => $session->id ] );
-
-        } catch ( \Stripe\Exception\ApiErrorException $e ) {
-            wp_send_json_error( [ 'message' => $e->getMessage() ] );
-        }
-    }
-
     // ── Webhook Stripe ────────────────────────────────────────────────
 
     public function register_webhook_endpoint(): void {
@@ -446,49 +210,21 @@ class PC_Payments {
             case 'checkout.session.completed':
                 $this->on_checkout_completed( $event->data->object );
                 break;
-            case 'payment_intent.payment_failed':
-                $this->on_payment_failed( $event->data->object );
-                break;
         }
 
         http_response_code( 200 ); echo 'OK';
     }
 
     private function on_checkout_completed( object $session ): void {
-        $photo_id = (int) ( $session->metadata->pc_photo_id ?? 0 );
-        $user_id  = (int) ( $session->metadata->pc_user_id  ?? 0 );
-        $type     = $session->metadata->pc_type ?? 'impression';
-        $token    = (string) ( $session->metadata->pc_payment_token ?? '' );
+        $user_id = (int) ( $session->metadata->pc_user_id  ?? 0 );
+        $token   = (string) ( $session->metadata->pc_payment_token ?? '' );
 
         if ( ! $user_id ) return;
 
-        // Paiement d'inscription (avant dépôt photos)
-        if ( $type === 'inscription' ) {
-            do_action( 'pc_inscription_paiement_recu', $user_id );
-            return;
-        }
-
-        // Phase 2 Task 9 : paiement groupé par token (plusieurs photos en une session)
+        // Paiement groupé par token (plusieurs photos en une session)
         if ( $token !== '' ) {
             $this->on_token_checkout_completed( $token, $session );
-            return;
         }
-
-        // Paiement impression (conservé pour compatibilité)
-        if ( ! $photo_id ) return;
-
-        $this->upsert_paiement( $photo_id, $user_id,
-            (int) ( $session->amount_total ?? 0 ),
-            strtoupper( $session->currency ?? 'EUR' ),
-            [
-                'statut_paiement'   => 'paiement_recu',
-                'reference_externe' => $session->payment_intent ?? $session->id,
-                'methode'           => 'stripe_checkout',
-            ]
-        );
-
-        // Déclenche Fluent CRM + création entrée catalogue
-        PC_Photos::get_instance()->update_statut( $photo_id, 'paiement_recu' );
     }
 
     /**
@@ -506,7 +242,7 @@ class PC_Payments {
         $table = PC_Database::table( PC_Database::TABLE_PAYMENTS );
 
         $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT id, photo_id FROM {$table}
+            "SELECT id, photo_id, user_id FROM {$table}
              WHERE payment_token = %s AND statut_paiement = 'en_attente'",
             $token
         ) );
@@ -514,8 +250,8 @@ class PC_Payments {
         if ( empty( $rows ) ) return;
 
         $reference = (string) ( $session->payment_intent ?? $session->id );
-        $photos    = PC_Photos::get_instance();
-
+        $tag_paye  = (int) PC_Settings::get( 'fluent_tag_paye', 0 );
+        $user_id   = 0;
         foreach ( $rows as $row ) {
             $wpdb->update(
                 $table,
@@ -526,38 +262,16 @@ class PC_Payments {
                 ],
                 [ 'id' => (int) $row->id ]
             );
-
-            // Déclenche Fluent CRM + création entrée catalogue
-            $photos->update_statut( (int) $row->photo_id, 'paiement_recu' );
+            // NE PAS changer le statut jury de la photo : elle reste en_attente, juste « payée ».
+            $user_id = (int) $row->user_id; // toutes les lignes d'un token partagent le même candidat
         }
-    }
 
-    private function on_payment_failed( object $intent ): void {
-        $photo_id = (int) ( $intent->metadata->pc_photo_id ?? 0 );
-        $user_id  = (int) ( $intent->metadata->pc_user_id  ?? 0 );
-        if ( ! $photo_id || ! $user_id ) return;
-
-        $this->upsert_paiement( $photo_id, $user_id, 0, 'EUR', [
-            'statut_paiement'   => 'echoue',
-            'reference_externe' => $intent->id,
-            'methode'           => 'stripe_checkout',
-        ] );
+        if ( $user_id > 0 ) {
+            do_action( 'pc_paiement_panier_recu', $user_id, $tag_paye );
+        }
     }
 
     // ── CRUD paiements ────────────────────────────────────────────────
-
-    public function upsert_paiement( int $photo_id, int $user_id, int $montant_cts, string $devise, array $data ): void {
-        global $wpdb;
-        $table   = PC_Database::table( PC_Database::TABLE_PAYMENTS );
-        $existant = $this->get_paiement_by_photo( $photo_id );
-        $payload  = array_merge( [ 'montant_centimes' => $montant_cts, 'devise' => strtoupper( $devise ) ], $data );
-
-        if ( $existant ) {
-            $wpdb->update( $table, $payload, [ 'photo_id' => $photo_id ] );
-        } else {
-            $wpdb->insert( $table, array_merge( $payload, [ 'photo_id' => $photo_id, 'user_id' => $user_id ] ) );
-        }
-    }
 
     public function get_paiement_by_photo( int $photo_id ): ?array {
         global $wpdb;
@@ -591,277 +305,263 @@ class PC_Payments {
         ) ?: [];
     }
 
-    // ── Clôture jury (Phase 2) ────────────────────────────────────────
+    // ── Helpers caddy (Task 1 — paiement avant jury) ─────────────────
 
     /**
-     * Phase 2 : statistiques pré-clôture pour le récap admin.
-     *
-     * @return array{en_delibration_a_refuser:int, photos_retenues:int, candidats_a_notifier:int, montant_total_cts:int, montant_unitaire_cts:int}
+     * Une photo est « payée » s'il existe une ligne paiement_recu pour son id.
      */
-    public static function get_cloture_stats(): array {
+    public function photo_est_payee( int $photo_id ): bool {
         global $wpdb;
-        $photos      = PC_Database::table( PC_Database::TABLE_PHOTOS );
-        $montant_cts = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+        $t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        return (bool) $wpdb->get_var( $wpdb->prepare(
+            "SELECT 1 FROM {$t} WHERE photo_id = %d AND statut_paiement = 'paiement_recu' LIMIT 1",
+            $photo_id
+        ) );
+    }
 
-        $en_delib  = (int) $wpdb->get_var(
-            "SELECT COUNT(*) FROM {$photos} WHERE statut IN ('en_attente', 'en_examen')"
-        );
-        $retenues  = (int) $wpdb->get_var(
-            "SELECT COUNT(*) FROM {$photos} WHERE statut = 'retenue'"
-        );
-        $candidats = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT user_id) FROM {$photos} WHERE statut = 'retenue'"
-        );
+    /**
+     * Récapitulatif de paiement (« caddy ») pour un candidat, sur ses photos en_attente.
+     *
+     * @return array{prix_unitaire_cts:int,nb_payees:int,nb_non_payees:int,montant_paye_cts:int,montant_du_cts:int,total_cts:int}
+     */
+    public function get_caddy( int $user_id ): array {
+        global $wpdb;
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $prix       = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+
+        $nb_payees = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND EXISTS ( SELECT 1 FROM {$payments_t} pay
+                            WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
+        $nb_non_payees = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND NOT EXISTS ( SELECT 1 FROM {$payments_t} pay
+                                WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
 
         return [
-            'en_delibration_a_refuser' => $en_delib,
-            'photos_retenues'          => $retenues,
-            'candidats_a_notifier'     => $candidats,
-            'montant_total_cts'        => $retenues * $montant_cts,
-            'montant_unitaire_cts'     => $montant_cts,
+            'prix_unitaire_cts' => $prix,
+            'nb_payees'         => $nb_payees,
+            'nb_non_payees'     => $nb_non_payees,
+            'montant_paye_cts'  => $nb_payees * $prix,
+            'montant_du_cts'    => $nb_non_payees * $prix,
+            'total_cts'         => ( $nb_payees + $nb_non_payees ) * $prix,
         ];
     }
 
     /**
-     * Phase 2 : exécute la clôture de la délibération du jury.
+     * Crée une ligne de paiement `en_attente` (prix unitaire) pour chaque photo en_attente
+     * non encore payée du candidat, sous un même payment_token. Renvoie le token, ou ''
+     * s'il n'y a rien à payer.
+     */
+    public function creer_lignes_panier( int $user_id ): string {
+        global $wpdb;
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        $prix       = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+        $devise     = strtoupper( (string) PC_Settings::get( 'devise', 'EUR' ) );
+
+        $photo_ids = $wpdb->get_col( $wpdb->prepare(
+            "SELECT p.id FROM {$photos_t} p
+             WHERE p.user_id = %d AND p.statut = 'en_attente'
+               AND NOT EXISTS ( SELECT 1 FROM {$payments_t} pay
+                                WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )",
+            $user_id
+        ) );
+        if ( empty( $photo_ids ) ) {
+            return '';
+        }
+
+        $token = wp_generate_uuid4();
+        foreach ( $photo_ids as $pid ) {
+            // Nettoyer une éventuelle ligne en_attente orpheline (panier abandonné).
+            // Borné par user_id : on ne touche que les lignes du candidat courant.
+            $wpdb->delete( $payments_t, [ 'photo_id' => (int) $pid, 'user_id' => $user_id, 'statut_paiement' => 'en_attente' ] );
+            $wpdb->insert( $payments_t, [
+                'photo_id'         => (int) $pid,
+                'user_id'          => $user_id,
+                'montant_centimes' => $prix,
+                'devise'           => $devise,
+                'statut_paiement'  => 'en_attente',
+                'methode'          => 'stripe_checkout',
+                'payment_token'    => $token,
+            ] );
+        }
+        return $token;
+    }
+
+    /**
+     * AJAX : crée les lignes panier pour le candidat courant et renvoie l'URL
+     * de l'endpoint /?pc_pay=<token> (qui ouvrira Stripe Checkout, Elementor-safe).
+     */
+    public function ajax_create_caddy_session(): void {
+        check_ajax_referer( 'pc_profile_nonce', 'nonce' );
+
+        if ( ! is_user_logged_in() || ! current_user_can( 'pc_pay_participation' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
+        }
+        if ( ! PC_Settings::is_depot_actif() ) {
+            wp_send_json_error( [ 'message' => __( 'Le dépôt est clôturé : paiement impossible.', PC_TEXT_DOMAIN ) ] );
+        }
+        if ( ! $this->is_configured() ) {
+            wp_send_json_error( [ 'message' => __( 'Stripe n\'est pas configuré.', PC_TEXT_DOMAIN ) ] );
+        }
+
+        $token = $this->creer_lignes_panier( get_current_user_id() );
+        if ( $token === '' ) {
+            wp_send_json_error( [ 'message' => __( 'Aucune photo à payer.', PC_TEXT_DOMAIN ) ] );
+        }
+
+        wp_send_json_success( [ 'url' => home_url( '/?pc_pay=' . rawurlencode( $token ) ) ] );
+    }
+
+    // ── Clôture jury (Phase 2) ────────────────────────────────────────
+
+    public static function get_cloture_stats(): array {
+        global $wpdb;
+        $photos = PC_Database::table( PC_Database::TABLE_PHOTOS );
+
+        return [
+            'en_delibration_a_refuser' => (int) $wpdb->get_var(
+                "SELECT COUNT(*) FROM {$photos} WHERE statut IN ('en_attente','en_examen')" ),
+            'photos_retenues'          => (int) $wpdb->get_var(
+                "SELECT COUNT(*) FROM {$photos} WHERE statut = 'retenue'" ),
+        ];
+    }
+
+    /**
+     * Clôture de la délibération du jury (modèle paiement-avant-jury).
      *
-     * Séquence :
-     *  1. Verrou anti-double-clic (cloture_en_cours)
-     *  2. Refus en lot des photos restantes en délibération
-     *  3. Pour chaque candidat à photos retenues : génération d'un payment_token, bascule vers
-     *     participation_demandee, INSERT dans wp_pc_payments (1 ligne par photo)
-     *  4. Bascule des flags (jury_actif=false, catalogue_actif=true, cloture_effectuee_at=time())
-     *  5. Planification du 1er tick cron d'envoi d'emails
-     *  6. do_action( 'pc_cloture_jury_effectuee' )
+     * 1. Verrou anti-double-clic (cloture_en_cours)
+     * 2. Photos payées encore en délibération (en_attente/en_examen) -> refusee
+     * 3. Photos retenue -> au_catalogue (déclenche l'alimentation catalogue)
+     * 4. Flags : jury_actif=false, catalogue_actif=true, cloture_effectuee_at=time()
+     * 5. do_action( 'pc_cloture_jury_effectuee' )
      *
-     * @return array{refused_count?:int, retenues_count?:int, candidats_count?:int, error?:string}
+     * Aucune création de paiement (le paiement a lieu avant le jury).
+     *
+     * @return array{refused_count?:int, au_catalogue_count?:int, error?:string}
      */
     public static function execute_cloture(): array {
         global $wpdb;
-        $photos_t    = PC_Database::table( PC_Database::TABLE_PHOTOS );
-        $payments_t  = PC_Database::table( PC_Database::TABLE_PAYMENTS );
-        $montant_cts = (int) PC_Settings::get( 'montant_participation_cts', 1500 );
+        $photos_t = PC_Database::table( PC_Database::TABLE_PHOTOS );
 
-        // 1. Verrou anti-double-clic
+        // 1. Verrou
         $lock_at = (int) PC_Settings::get( 'cloture_en_cours', 0 );
         if ( $lock_at && ( time() - $lock_at ) < 300 ) {
             return [ 'error' => 'cloture_en_cours' ];
         }
         PC_Settings::set( 'cloture_en_cours', time() );
 
-        // 2. Refus en lot
+        // 2. Refus des photos non départagées
         $refused = (int) $wpdb->query(
-            "UPDATE {$photos_t}
-             SET statut = 'refusee'
-             WHERE statut IN ('en_attente', 'en_examen')"
+            "UPDATE {$photos_t} SET statut = 'refusee' WHERE statut IN ('en_attente','en_examen')"
         );
 
-        // 3. Bascule par candidat + création paiements
-        $candidats = $wpdb->get_col(
-            "SELECT DISTINCT user_id FROM {$photos_t} WHERE statut = 'retenue'"
-        );
-
-        $total_retenues = 0;
-        foreach ( $candidats as $user_id ) {
-            $user_id = (int) $user_id;
-            $token   = wp_generate_uuid4();
-
-            $retenue_ids = $wpdb->get_col( $wpdb->prepare(
-                "SELECT id FROM {$photos_t} WHERE user_id = %d AND statut = 'retenue'",
-                $user_id
-            ) );
-
-            foreach ( $retenue_ids as $photo_id ) {
-                $photo_id = (int) $photo_id;
-                $wpdb->update( $photos_t, [ 'statut' => 'participation_demandee' ], [ 'id' => $photo_id ] );
-                $wpdb->insert( $payments_t, [
-                    'photo_id'         => $photo_id,
-                    'user_id'          => $user_id,
-                    'montant_centimes' => $montant_cts,
-                    'devise'           => 'EUR',
-                    'statut_paiement'  => 'en_attente',
-                    'methode'          => 'stripe_checkout',
-                    'payment_token'    => $token,
-                ] );
-                $total_retenues++;
-            }
+        // 3. retenue -> au_catalogue (via update_statut pour déclencher l'alimentation catalogue)
+        $retenue_ids = $wpdb->get_col( "SELECT id FROM {$photos_t} WHERE statut = 'retenue'" );
+        $photos = PC_Photos::get_instance();
+        foreach ( $retenue_ids as $pid ) {
+            $photos->update_statut( (int) $pid, 'au_catalogue' );
         }
 
-        // 4. Bascule des flags
+        // 4. Flags
         PC_Settings::set( 'jury_actif',           false );
-        PC_Settings::set( 'catalogue_actif',      true );   // ouverture auto du catalogue
+        PC_Settings::set( 'catalogue_actif',      true );
         PC_Settings::set( 'cloture_en_cours',     0 );
         PC_Settings::set( 'cloture_effectuee_at', time() );
 
-        // 5. Planification du 1er tick cron d'envoi d'emails
-        if ( ! wp_next_scheduled( 'pc_send_payment_email_batch' ) ) {
-            wp_schedule_single_event( time(), 'pc_send_payment_email_batch' );
-        }
-
-        // 6. Trigger
+        // 5. Trigger
         do_action( 'pc_cloture_jury_effectuee' );
 
         return [
-            'refused_count'   => $refused,
-            'retenues_count'  => $total_retenues,
-            'candidats_count' => count( $candidats ),
+            'refused_count'      => $refused,
+            'au_catalogue_count' => count( $retenue_ids ),
         ];
     }
 
     /**
-     * Phase 2 : tick WP-Cron — envoie une fournée d'emails de demande de paiement groupé.
+     * Liste des user_id ayant au moins une photo en_attente non payée.
+     * Sert au ciblage des relances avant clôture.
      *
-     * SELECT groupe (user_id, payment_token) avec email_envoye_at IS NULL, taille bornée par
-     * pc_settings.email_batch_size. Pour chaque groupe : trigger Fluent CRM (Task 12) + marquer
-     * email_envoye_at. Re-planifie un tick suivant si reste des entrées en attente.
+     * @return int[]
      */
-    public function cron_send_batch(): void {
+    public function candidats_avec_photos_non_payees(): array {
         global $wpdb;
-        $payments = PC_Database::table( PC_Database::TABLE_PAYMENTS );
-        $batch    = max( 1, min( 100, (int) PC_Settings::get( 'email_batch_size', 20 ) ) );
-
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT user_id, payment_token,
-                    GROUP_CONCAT(photo_id) AS photo_ids,
-                    SUM(montant_centimes) AS montant_total,
-                    COUNT(*)              AS nb_photos
-             FROM {$payments}
-             WHERE email_envoye_at IS NULL
-               AND statut_paiement = 'en_attente'
-               AND payment_token IS NOT NULL
-             GROUP BY user_id, payment_token
-             LIMIT %d",
-            $batch
+        $photos_t   = PC_Database::table( PC_Database::TABLE_PHOTOS );
+        $payments_t = PC_Database::table( PC_Database::TABLE_PAYMENTS );
+        return array_map( 'intval', $wpdb->get_col(
+            "SELECT DISTINCT p.user_id FROM {$photos_t} p
+             WHERE p.statut = 'en_attente'
+               AND NOT EXISTS ( SELECT 1 FROM {$payments_t} pay
+                                WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )"
         ) );
-
-        foreach ( $rows as $row ) {
-            $user_id     = (int) $row->user_id;
-            $token       = (string) $row->payment_token;
-            $nb_photos   = (int) $row->nb_photos;
-            $montant_cts = (int) $row->montant_total;
-            $payment_url = home_url( '/?pc_pay=' . rawurlencode( $token ) );
-
-            // Hook consommé par PC_Fluent_CRM (Task 12). En l'absence de listener,
-            // l'événement est silencieusement ignoré (graceful degradation).
-            do_action( 'pc_participation_demandee_groupee', $user_id, [
-                'nb_photos'   => $nb_photos,
-                'montant_cts' => $montant_cts,
-                'payment_url' => $payment_url,
-            ] );
-
-            // Marquer envoyés (idempotent : si l'UPDATE échoue partiellement, le tick suivant
-            // retentera mais le hook Fluent CRM pourra être déclenché plusieurs fois ; la
-            // déduplication finale est côté Fluent CRM via le contact email).
-            $wpdb->query( $wpdb->prepare(
-                "UPDATE {$payments}
-                 SET email_envoye_at = NOW()
-                 WHERE user_id = %d AND payment_token = %s AND email_envoye_at IS NULL",
-                $user_id, $token
-            ) );
-        }
-
-        // S'il reste des paiements en attente d'email, replanifier le prochain tick
-        $remaining = (int) $wpdb->get_var(
-            "SELECT COUNT(*)
-             FROM {$payments}
-             WHERE email_envoye_at IS NULL
-               AND statut_paiement = 'en_attente'
-               AND payment_token IS NOT NULL"
-        );
-
-        if ( $remaining > 0 ) {
-            $itv = max( 1, min( 60, (int) PC_Settings::get( 'email_batch_interval_minutes', 5 ) ) );
-            if ( ! wp_next_scheduled( 'pc_send_payment_email_batch' ) ) {
-                wp_schedule_single_event( time() + ( $itv * 60 ), 'pc_send_payment_email_batch' );
-            }
-        }
     }
 
     /**
-     * Phase 2 : tick WP-Cron quotidien — relance des candidats avec paiements impayés.
+     * Cron quotidien : relances de paiement avant la clôture des dépôts.
      *
-     * Désactivé si pc_settings.relance_jours = 0 ou pc_settings.relance_max = 0.
-     *
-     * Conditions de sélection :
-     *  - statut_paiement = 'en_attente'
-     *  - email_envoye_at IS NOT NULL (l'email initial a été envoyé)
-     *  - email_envoye_at < NOW() - INTERVAL relance_jours DAY (assez vieux)
-     *  - nb_relances < relance_max (n'a pas atteint le plafond)
-     *  - derniere_relance_at IS NULL OR < NOW() - INTERVAL relance_jours DAY (cooldown respecté)
-     *
-     * Pour chaque candidat retourné : trigger pc_relance_paiement, UPDATE nb_relances + derniere_relance_at.
-     * La taille de lot est bornée par pc_settings.email_batch_size (même limite que l'envoi initial).
+     * Envoie une relance aux candidats ayant ≥1 photo non payée, lorsqu'il reste
+     * exactement relance_offset_1 (J-10) ou relance_offset_2 (J-5) jours avant
+     * date_fermeture_depot. Calcul des jours côté PHP, ancré sur wp_timezone().
+     * Anti-doublon : option par offset et par date de clôture.
      */
     public function cron_relances_quotidiennes(): void {
-        global $wpdb;
-
-        $relance_jours = (int) PC_Settings::get( 'relance_jours', 5 );
-        $relance_max   = (int) PC_Settings::get( 'relance_max', 2 );
-
-        if ( $relance_jours === 0 || $relance_max === 0 ) {
-            return; // Désactivé via réglages
+        $fermeture = (string) PC_Settings::get( 'date_fermeture_depot', '' );
+        if ( $fermeture === '' ) {
+            return;
+        }
+        try {
+            $tz    = wp_timezone();
+            $end   = ( new DateTimeImmutable( $fermeture, $tz ) )->setTime( 0, 0 );
+            $today = ( new DateTimeImmutable( 'now', $tz ) )->setTime( 0, 0 );
+        } catch ( Exception $e ) {
+            return;
+        }
+        $jours_restants = (int) $today->diff( $end )->format( '%r%a' );
+        if ( $jours_restants < 0 ) {
+            return; // clôture passée
         }
 
-        $payments = PC_Database::table( PC_Database::TABLE_PAYMENTS );
-        $batch    = max( 1, min( 100, (int) PC_Settings::get( 'email_batch_size', 20 ) ) );
+        $offsets = [
+            1 => (int) PC_Settings::get( 'relance_offset_1', 10 ),
+            2 => (int) PC_Settings::get( 'relance_offset_2', 5 ),
+        ];
 
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT user_id, payment_token,
-                    COUNT(*)                  AS nb_photos,
-                    SUM(montant_centimes)     AS montant_total,
-                    MAX(nb_relances)          AS nb_relances_actuel,
-                    MAX(derniere_relance_at)  AS last_relance
-             FROM {$payments}
-             WHERE statut_paiement = 'en_attente'
-               AND email_envoye_at IS NOT NULL
-               AND email_envoye_at < DATE_SUB( NOW(), INTERVAL %d DAY )
-               AND payment_token IS NOT NULL
-             GROUP BY user_id, payment_token
-             HAVING nb_relances_actuel < %d
-                AND ( last_relance IS NULL
-                      OR last_relance < DATE_SUB( NOW(), INTERVAL %d DAY ) )
-             LIMIT %d",
-            $relance_jours, $relance_max, $relance_jours, $batch
-        ) );
+        foreach ( $offsets as $rang => $offset ) {
+            if ( $offset <= 0 || $jours_restants !== $offset ) {
+                continue;
+            }
+            $flag = 'pc_relance_sent_' . $rang . '_' . $end->format( 'Ymd' );
+            if ( get_option( $flag ) ) {
+                continue; // déjà envoyée pour cette édition
+            }
 
-        foreach ( $rows as $row ) {
-            $user_id     = (int) $row->user_id;
-            $token       = (string) $row->payment_token;
-            $nb_photos   = (int) $row->nb_photos;
-            $montant_cts = (int) $row->montant_total;
-            $payment_url = home_url( '/?pc_pay=' . rawurlencode( $token ) );
-            $nb_done     = (int) $row->nb_relances_actuel + 1;
+            $profil_url = get_permalink( get_option( 'pc_page_profil' ) ) ?: home_url( '/' );
 
-            // Hook consommé par PC_Fluent_CRM (Task 12). Sans listener : graceful degradation.
-            do_action( 'pc_relance_paiement', $user_id, [
-                'nb_photos'   => $nb_photos,
-                'montant_cts' => $montant_cts,
-                'payment_url' => $payment_url,
-                'nb_relances' => $nb_done,
-            ] );
+            foreach ( $this->candidats_avec_photos_non_payees() as $user_id ) {
+                $caddy = $this->get_caddy( $user_id );
+                if ( $caddy['nb_non_payees'] <= 0 ) {
+                    continue;
+                }
+                // Hook consommé par PC_Fluent_CRM. Dégradation gracieuse si absent.
+                do_action( 'pc_relance_paiement', $user_id, [
+                    'nb_non_payees'  => $caddy['nb_non_payees'],
+                    'montant_du_cts' => $caddy['montant_du_cts'],
+                    'date_cloture'   => $end->format( 'Y-m-d' ),
+                    'profil_url'     => $profil_url,
+                    'rang'           => $rang,
+                ] );
+            }
 
-            // Incrément nb_relances + horodatage derniere_relance_at sur toutes les lignes du groupe
-            $wpdb->query( $wpdb->prepare(
-                "UPDATE {$payments}
-                 SET derniere_relance_at = NOW(),
-                     nb_relances         = nb_relances + 1
-                 WHERE user_id = %d
-                   AND payment_token = %s
-                   AND statut_paiement = 'en_attente'",
-                $user_id, $token
-            ) );
+            update_option( $flag, time(), false );
         }
     }
 
-    // ── Utilitaires ───────────────────────────────────────────────────
-
-    public function get_thumb_url( int $photo_id ): string {
-        $token = wp_create_nonce( "pc_photo_{$photo_id}_" . get_current_user_id() );
-        return add_query_arg( [ 'pc_photo' => $photo_id, 'taille' => 'thumb', 'token' => $token ], home_url( '/' ) );
-    }
-
-    public function maybe_enqueue_assets(): void {
-        if ( isset( $_GET['pc_action'] ) || isset( $_GET['pc_stripe'] ) )
-            wp_enqueue_style( 'pc-payment', PC_PLUGIN_URL . 'public/css/pc-payment.css', [], PC_VERSION . '.2' );
-    }
 }

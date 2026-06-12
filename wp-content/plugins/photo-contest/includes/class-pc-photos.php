@@ -38,6 +38,7 @@ class PC_Photos {
         add_action( 'wp_ajax_pc_delete_photo', [ $this, 'ajax_delete' ] );
         add_action( 'wp_ajax_pc_reorder_photos',  [ $this, 'ajax_reorder' ] );
         add_action( 'wp_ajax_pc_update_titre',    [ $this, 'ajax_update_titre' ] );
+        add_action( 'wp_ajax_pc_change_category', [ $this, 'ajax_change_category' ] );
 
         // Hook interne : statut changé → notification
         add_action( 'pc_photo_statut_changed', [ $this, 'on_statut_changed' ], 10, 3 );
@@ -274,6 +275,11 @@ class PC_Photos {
         // 8. Extraction du titre depuis les métadonnées EXIF/IPTC
         $titre = $this->extract_titre_from_exif( $chemin_dest, $nom_fichier );
 
+        // Anonymat jury : ne jamais importer un titre EXIF contenant le nom du candidat.
+        if ( $titre !== '' && $this->titre_contient_nom( $titre, $user_id ) ) {
+            $titre = '';
+        }
+
         // 9. Insertion en BDD
         $wpdb->insert( $table_photos, [
             'user_id'         => $user_id,
@@ -446,6 +452,74 @@ class PC_Photos {
     // Mise à jour titre (AJAX)
     // ──────────────────────────────────────────────────────────────────────
 
+    // ──────────────────────────────────────────────────────────────────────
+    // Changement de catégorie (drag-drop)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Déplace une photo du candidat vers une autre catégorie.
+     * Revalide tout côté serveur : appartenance, dépôt actif, catégorie active, quota.
+     *
+     * @return array{success:bool, message?:string, category_id?:int}
+     */
+    public function changer_categorie( int $photo_id, int $category_id, int $user_id ): array {
+        global $wpdb;
+        $table = PC_Database::table( PC_Database::TABLE_PHOTOS );
+
+        $photo = $this->get_photo( $photo_id, $user_id );
+        if ( ! $photo ) {
+            return [ 'success' => false, 'message' => __( 'Photo introuvable.', PC_TEXT_DOMAIN ) ];
+        }
+        if ( ! PC_Settings::is_depot_actif() ) {
+            return [ 'success' => false, 'message' => __( 'Le dépôt est clôturé.', PC_TEXT_DOMAIN ) ];
+        }
+        $cat = $category_id > 0 ? PC_Categories::get( $category_id ) : null;
+        if ( ! $cat || empty( $cat['actif'] ) ) {
+            return [ 'success' => false, 'message' => __( 'Catégorie invalide.', PC_TEXT_DOMAIN ) ];
+        }
+        if ( (int) $photo['category_id'] === $category_id ) {
+            return [ 'success' => true, 'category_id' => $category_id ];
+        }
+
+        $quota = (int) PC_Settings::get( 'quota_photos', 5 );
+        $count = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE user_id = %d AND category_id = %d",
+            $user_id, $category_id
+        ) );
+        if ( $quota > 0 && $count >= $quota ) {
+            return [ 'success' => false, 'message' => __( 'Cette catégorie est complète.', PC_TEXT_DOMAIN ) ];
+        }
+
+        $max_ordre = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT MAX(ordre_affichage) FROM {$table} WHERE user_id = %d AND category_id = %d",
+            $user_id, $category_id
+        ) );
+        $wpdb->update(
+            $table,
+            [ 'category_id' => $category_id, 'ordre_affichage' => $max_ordre + 1 ],
+            [ 'id' => $photo_id, 'user_id' => $user_id ]
+        );
+
+        return [ 'success' => true, 'category_id' => $category_id ];
+    }
+
+    /**
+     * AJAX : déplacement de catégorie par glisser-déposer.
+     */
+    public function ajax_change_category(): void {
+        check_ajax_referer( 'pc_category_nonce', 'nonce' );
+        if ( ! current_user_can( 'pc_view_own_photos' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
+        }
+        $photo_id    = (int) ( $_POST['photo_id'] ?? 0 );
+        $category_id = (int) ( $_POST['category_id'] ?? 0 );
+        $res = $this->changer_categorie( $photo_id, $category_id, get_current_user_id() );
+        if ( ! empty( $res['success'] ) ) {
+            wp_send_json_success( $res );
+        }
+        wp_send_json_error( $res );
+    }
+
     public function ajax_update_titre(): void {
         check_ajax_referer( 'pc_titre_nonce', 'nonce' );
 
@@ -467,11 +541,48 @@ class PC_Photos {
             wp_send_json_error( [ 'message' => __( 'Photo introuvable.', PC_TEXT_DOMAIN ) ] );
         }
 
+        if ( $titre !== '' && $this->titre_contient_nom( $titre, $user_id ) ) {
+            wp_send_json_error( [ 'message' => __( 'Le titre ne doit pas contenir votre nom ni votre prénom.', PC_TEXT_DOMAIN ) ] );
+        }
+
         global $wpdb;
         $table = PC_Database::table( PC_Database::TABLE_PHOTOS );
         $wpdb->update( $table, [ 'titre' => $titre ], [ 'id' => $photo_id, 'user_id' => $user_id ] );
 
         wp_send_json_success( [ 'titre' => $titre ] );
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Anonymat jury : détection du nom dans le titre
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Vrai si le titre contient le prénom ou le nom du candidat (mot entier,
+     * insensible à la casse et aux accents). Termes vides ou < 2 caractères ignorés.
+     */
+    public function titre_contient_nom( string $titre, int $user_id ): bool {
+        $titre_norm = $this->normaliser_pour_comparaison( $titre );
+        if ( $titre_norm === '' ) {
+            return false;
+        }
+        $profile = PC_Profile::get_instance()->get_profile( $user_id ) ?: [];
+        foreach ( [ $profile['prenom'] ?? '', $profile['nom'] ?? '' ] as $terme ) {
+            $terme_norm = $this->normaliser_pour_comparaison( (string) $terme );
+            if ( mb_strlen( $terme_norm ) < 2 ) {
+                continue;
+            }
+            if ( preg_match( '/\b' . preg_quote( $terme_norm, '/' ) . '\b/u', $titre_norm ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Minuscule + suppression des accents, pour comparaison tolérante.
+     */
+    private function normaliser_pour_comparaison( string $s ): string {
+        return trim( mb_strtolower( remove_accents( $s ) ) );
     }
 
     // ──────────────────────────────────────────────────────────────────────

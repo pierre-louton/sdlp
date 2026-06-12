@@ -28,6 +28,7 @@ class PC_Jury {
         $tv = PC_Database::table( PC_Database::TABLE_VOTES );
         $tc = PC_Database::table( PC_Database::TABLE_CATEGORIES );
 
+        $tpay      = PC_Database::table( PC_Database::TABLE_PAYMENTS );
         $cat_where = $category_id > 0 ? 'AND p.category_id = %d' : '';
         $sql = "SELECT p.id, p.largeur_px, p.hauteur_px, p.ratio_type, p.taille_octets, p.statut, p.ordre_affichage,
                        p.category_id, c.nom AS nom_categorie,
@@ -35,7 +36,10 @@ class PC_Jury {
                 FROM {$tp} p
                 LEFT JOIN {$tv} v ON v.photo_id = p.id AND v.jury_user_id = %d
                 LEFT JOIN {$tc} c ON c.id = p.category_id
-                WHERE p.statut IN ('en_attente','en_examen') {$cat_where}
+                WHERE p.statut IN ('en_attente','en_examen')
+                  AND EXISTS ( SELECT 1 FROM {$tpay} pay
+                               WHERE pay.photo_id = p.id AND pay.statut_paiement = 'paiement_recu' )
+                  {$cat_where}
                 ORDER BY p.ordre_affichage ASC";
 
         $args = $category_id > 0 ? [ $jury_user_id, $category_id ] : [ $jury_user_id ];
@@ -130,9 +134,8 @@ class PC_Jury {
         $nouveau = $nb_retenu >= $nb_refuse ? 'retenue' : 'refusee';
         PC_Photos::get_instance()->update_statut( $photo_id, $nouveau );
 
-        // Phase 2 : la cascade automatique retenue → participation_demandee est SUPPRIMÉE.
         // La photo reste en « retenue » jusqu'à la clôture admin (PC_Payments::execute_cloture),
-        // qui bascule en lot toutes les retenues et crée les paiements groupés par candidat.
+        // qui bascule en lot toutes les retenues vers au_catalogue.
 
         return [
             'nouveau_statut' => $nouveau,
@@ -162,8 +165,7 @@ class PC_Jury {
             "SELECT COUNT(*) AS total,
              SUM(statut='en_attente') AS en_attente, SUM(statut='en_examen') AS en_examen,
              SUM(statut='retenue') AS retenues, SUM(statut='refusee') AS refusees,
-             SUM(statut='participation_demandee') AS participation_demandee,
-             SUM(statut='paiement_recu') AS paiement_recu, SUM(statut='au_catalogue') AS au_catalogue
+             SUM(statut='au_catalogue') AS au_catalogue
              FROM {$tp}", ARRAY_A
         ) ?: [];
         return array_merge( $totaux, [

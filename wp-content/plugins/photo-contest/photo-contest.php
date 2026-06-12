@@ -3,10 +3,10 @@
  * Plugin Name:       Photo Contest Manager
  * Plugin URI:        https://example.com/photo-contest
  * Description:       Gestion complète d'un concours photo international : dépôt, jury, paiement, catalogue.
- * Version:           2.0.0
+ * Version:           2.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
- * Author:            Votre Nom
+ * Author:            Pierre Beaubié pour le Photo club Pavillonnais
  * Text Domain:       photo-contest
  * Domain Path:       /languages
  */
@@ -14,7 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Constantes globales du plugin
-define( 'PC_VERSION',     '2.0.0' );
+define( 'PC_VERSION',     '2.1.0' );
 define( 'PC_PLUGIN_FILE', __FILE__ );
 define( 'PC_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'PC_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
@@ -27,13 +27,11 @@ define( 'PC_ROLE_CATALOGUE', 'pc_catalogue_editor' );
 
 // Statuts des photos (slugs internes → libellés FR)
 define( 'PC_STATUTS_PHOTO', [
-    'en_attente'             => 'En attente',
-    'en_examen'              => 'En cours d\'examen',
-    'retenue'                => 'Retenue',
-    'refusee'                => 'Refusée',
-    'participation_demandee' => 'Retenue',      // alias interne — même affichage que retenue
-    'paiement_recu'          => 'Au catalogue', // alias interne
-    'au_catalogue'           => 'Au catalogue',
+    'en_attente'  => 'En attente',
+    'en_examen'   => 'En cours d\'examen',
+    'retenue'     => 'Retenue',
+    'refusee'     => 'Refusée',
+    'au_catalogue' => 'Au catalogue',
 ] );
 
 // Statuts visibles côté candidat (filtre sidebar)

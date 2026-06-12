@@ -4,7 +4,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Module Catalogue — Composition et exports.
  *
- * Alimentation auto quand statut → "paiement_recu"
+ * Alimentation auto quand statut → "au_catalogue"
  * CRUD fiches, toggle inclusion, réordonnancement
  * Export CSV, JSON, PDF (via mPDF : composer require mpdf/mpdf)
  */
@@ -29,7 +29,7 @@ class PC_Catalogue {
     // ── Alimentation automatique ──────────────────────────────────────
 
     public function on_statut_changed( int $photo_id, string $nouveau, string $ancien ): void {
-        if ( $nouveau === 'paiement_recu' ) $this->creer_entree_si_absente( $photo_id );
+        if ( $nouveau === 'au_catalogue' ) $this->creer_entree_si_absente( $photo_id );
     }
 
     public function creer_entree_si_absente( int $photo_id ): void {

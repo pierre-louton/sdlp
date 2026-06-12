@@ -58,6 +58,7 @@ class PC_Database {
             profil_complet  TINYINT(1)      NOT NULL DEFAULT 0,
             reglement_accepte TINYINT(1)    NOT NULL DEFAULT 0,
             reglement_date  DATETIME        NULL,
+            opt_in_prochain TINYINT(1)      NOT NULL DEFAULT 0,
             email_verifie   TINYINT(1)      NOT NULL DEFAULT 0,
             paiement_inscription_recu TINYINT(1) NOT NULL DEFAULT 0,
             created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -174,6 +175,7 @@ class PC_Database {
         self::dedupe_existing_photos();
         self::add_unique_hash_index();
         self::add_payments_phase2_columns();
+        self::add_profiles_phase3_columns();
         self::backfill_email_envoye_at();
 
         // Mise à jour de la version en base
@@ -407,6 +409,9 @@ class PC_Database {
         if ( ! in_array( 'idx_email_pending', $existing_indexes, true ) ) {
             $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_email_pending (email_envoye_at, statut_paiement)" );
         }
+        if ( ! in_array( 'idx_photo_statut', $existing_indexes, true ) ) {
+            $wpdb->query( "ALTER TABLE {$table} ADD KEY idx_photo_statut (photo_id, statut_paiement)" );
+        }
     }
 
     /**
@@ -429,6 +434,26 @@ class PC_Database {
              SET email_envoye_at = updated_at
              WHERE statut_paiement = 'paiement_recu' AND email_envoye_at IS NULL"
         );
+    }
+
+    /**
+     * Sous-projet 3 : colonne d'opt-in « prochain concours » sur la table profils.
+     * Idempotent — vérifie la colonne avant ALTER.
+     */
+    private static function add_profiles_phase3_columns(): void {
+        global $wpdb;
+        $table = self::table( self::TABLE_PROFILES );
+        $exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s",
+            $table, 'opt_in_prochain'
+        ) );
+        if ( ! $exists ) {
+            $result = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN opt_in_prochain TINYINT(1) NOT NULL DEFAULT 0" );
+            if ( false === $result ) {
+                error_log( '[PC_Database::add_profiles_phase3_columns] ALTER failed : ' . $wpdb->last_error );
+            }
+        }
     }
 
     /**

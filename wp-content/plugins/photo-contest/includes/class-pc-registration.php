@@ -7,9 +7,8 @@ defined( 'ABSPATH' ) || exit;
  * Nouveau flux candidat :
  *  1. Inscription sur /connexion/ → compte créé, email de vérification envoyé
  *  2. Clic sur le lien de vérification → email_verifie = 1
- *  3. Redirection vers profil → complétion + règlement
- *  4. Redirection vers paiement d'inscription → Stripe
- *  5. Paiement reçu → paiement_inscription_recu = 1 → accès galerie
+ *  3. Redirection vers profil → complétion + acceptation du règlement
+ *  4. Accès galerie immédiat (dépôt libre après acceptation du règlement)
  *
  * Anti-fraude :
  *  - Rate limiting inscription : 3 comptes max / IP / 24h
@@ -39,8 +38,6 @@ class PC_Registration {
         // AJAX inscription
         add_action( 'wp_ajax_nopriv_pc_register', [ $this, 'ajax_register' ] );
 
-        // Hook après paiement inscription reçu
-        add_action( 'pc_inscription_paiement_recu', [ $this, 'on_inscription_paiement_recu' ] );
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -245,11 +242,10 @@ class PC_Registration {
         $table   = PC_Database::table( PC_Database::TABLE_PROFILES );
         $profile = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d", $user_id ), ARRAY_A );
 
-        if ( ! $profile )                              return 'email_non_verifie';
-        if ( ! $profile['email_verifie'] )             return 'email_non_verifie';
-        if ( ! $profile['profil_complet'] )            return 'profil_incomplet';
-        if ( ! $profile['reglement_accepte'] )         return 'reglement_non_accepte';
-        if ( ! $profile['paiement_inscription_recu'] ) return 'paiement_requis';
+        if ( ! $profile )                      return 'email_non_verifie';
+        if ( ! $profile['email_verifie'] )     return 'email_non_verifie';
+        if ( ! $profile['profil_complet'] )    return 'profil_incomplet';
+        if ( ! $profile['reglement_accepte'] ) return 'reglement_non_accepte';
         return 'complet';
     }
 
@@ -258,16 +254,6 @@ class PC_Registration {
      */
     public static function peut_deposer( int $user_id ): bool {
         return self::get_etape( $user_id ) === 'complet';
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // Après paiement d'inscription reçu
-    // ──────────────────────────────────────────────────────────────────
-
-    public function on_inscription_paiement_recu( int $user_id ): void {
-        global $wpdb;
-        $table = PC_Database::table( PC_Database::TABLE_PROFILES );
-        $wpdb->update( $table, [ 'paiement_inscription_recu' => 1 ], [ 'user_id' => $user_id ] );
     }
 
     // ──────────────────────────────────────────────────────────────────

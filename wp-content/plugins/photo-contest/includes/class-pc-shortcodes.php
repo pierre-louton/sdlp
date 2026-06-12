@@ -61,15 +61,16 @@ class PC_Shortcodes {
         wp_enqueue_style( 'pc-gallery', PC_PLUGIN_URL . 'public/css/pc-gallery.css', [], PC_VERSION . '.9' );
         wp_enqueue_script( 'pc-gallery', PC_PLUGIN_URL . 'public/js/pc-gallery.js', [], PC_VERSION . '.9', true );
         wp_localize_script( 'pc-gallery', 'pcGalleryConfig', [
-            'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-            'nonceGet'     => wp_create_nonce( 'pc_get_photos_nonce' ),
-            'nonceUpload'  => wp_create_nonce( 'pc_upload_nonce' ),
-            'nonceDelete'  => wp_create_nonce( 'pc_delete_nonce' ),
-            'nonceReorder' => wp_create_nonce( 'pc_reorder_nonce' ),
-            'nonceTitre'   => wp_create_nonce( 'pc_titre_nonce' ),
-            'quotaMax'     => (int) PC_Settings::get( 'quota_photos', 5 ),
-            'depotActif'   => PC_Settings::is_depot_actif(),
-            'statuts'      => PC_STATUTS_CANDIDAT,
+            'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
+            'nonceGet'      => wp_create_nonce( 'pc_get_photos_nonce' ),
+            'nonceUpload'   => wp_create_nonce( 'pc_upload_nonce' ),
+            'nonceDelete'   => wp_create_nonce( 'pc_delete_nonce' ),
+            'nonceReorder'  => wp_create_nonce( 'pc_reorder_nonce' ),
+            'nonceTitre'    => wp_create_nonce( 'pc_titre_nonce' ),
+            'nonceCategory' => wp_create_nonce( 'pc_category_nonce' ),
+            'quotaMax'      => (int) PC_Settings::get( 'quota_photos', 5 ),
+            'depotActif'    => PC_Settings::is_depot_actif(),
+            'statuts'       => PC_STATUTS_CANDIDAT,
         ] );
     }
 
@@ -107,6 +108,8 @@ class PC_Shortcodes {
             $reglement_url = PC_Settings::get( 'reglement_url', '' );
             $espace_url = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
             $logout_url = wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) );
+            $caddy = PC_Payments::get_instance()->get_caddy( $user_id );
+            $depot_actif_now = PC_Settings::is_depot_actif();
             wp_enqueue_style(  'pc-profile', PC_PLUGIN_URL . 'public/css/pc-profile.css', [], PC_VERSION . '.4' );
             wp_enqueue_script( 'pc-profile', PC_PLUGIN_URL . 'public/js/pc-profile.js',  [], PC_VERSION . '.4', true );
             wp_localize_script( 'pc-profile', 'pcProfileConfig', [
@@ -136,6 +139,8 @@ class PC_Shortcodes {
         $reglement_url = PC_Settings::get( 'reglement_url', '' );
         $espace_url = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
         $logout_url = wp_logout_url( home_url( '/' . PC_Settings::get( 'login_slug', 'connexion' ) . '/' ) );
+        $caddy = PC_Payments::get_instance()->get_caddy( $user_id );
+        $depot_actif_now = PC_Settings::is_depot_actif();
 
         wp_enqueue_style(  'pc-profile', PC_PLUGIN_URL . 'public/css/pc-profile.css', [], PC_VERSION . '.4' );
         wp_enqueue_script( 'pc-profile', PC_PLUGIN_URL . 'public/js/pc-profile.js',  [], PC_VERSION . '.4', true );
@@ -205,22 +210,22 @@ class PC_Shortcodes {
         $quota      = (int) PC_Settings::get( 'quota_photos', 5 );
         $categories = PC_Categories::get_all( true ); // only active
 
-        // Enrichir chaque photo (URLs)
-        $photos = array_map( function ( $photo ) use ( $user_id ) {
-            $photo['url_thumb'] = $this->get_photo_url( (int) $photo['id'], 'thumb' );
-            $photo['url_full']  = $this->get_photo_url( (int) $photo['id'], 'full' );
+        // Précharger les IDs de photos payées en une seule requête (évite N requêtes)
+        global $wpdb;
+        $payes = array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT pay.photo_id
+             FROM " . PC_Database::table( PC_Database::TABLE_PAYMENTS ) . " pay
+             JOIN " . PC_Database::table( PC_Database::TABLE_PHOTOS ) . " p ON p.id = pay.photo_id
+             WHERE p.user_id = %d AND pay.statut_paiement = 'paiement_recu'",
+            $user_id
+        ) ) );
 
-            if ( $photo['statut'] === 'participation_demandee' ) {
-                $token = wp_create_nonce( "pc_payment_{$user_id}_{$photo['id']}" );
-                $base  = get_permalink( get_option( 'pc_page_espace_candidat' ) ) ?: home_url( '/' );
-                $photo['url_paiement'] = add_query_arg( [
-                    'pc_action' => 'paiement',
-                    'photo'     => $photo['id'],
-                    'token'     => $token,
-                ], $base );
-            } else {
-                $photo['url_paiement'] = '';
-            }
+        // Enrichir chaque photo (URLs + flag paye)
+        $photos = array_map( function ( $photo ) use ( $user_id, $payes ) {
+            $photo['url_thumb']    = $this->get_photo_url( (int) $photo['id'], 'thumb' );
+            $photo['url_full']     = $this->get_photo_url( (int) $photo['id'], 'full' );
+            $photo['paye']         = in_array( (int) $photo['id'], $payes, true );
+            $photo['url_paiement'] = '';
 
             return $photo;
         }, $photos );

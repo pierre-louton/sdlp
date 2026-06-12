@@ -64,6 +64,9 @@ class PC_Settings {
         'relance_offset_1'             => 10,   // 1re relance : J-10 avant clôture dépôt (0 = off)
         'relance_offset_2'             => 5,    // 2e relance  : J-5 avant clôture dépôt (0 = off)
         'cloture_effectuee_at'         => 0,
+
+        // Phase 3 : RGPD
+        'rgpd_texte'                => 'Les informations recueillies dans ce formulaire sont enregistrées par le Photo Club Pavillonnais et utilisées uniquement pour la gestion de votre participation au concours photo (inscription, délibération du jury, paiement, catalogue). Elles ne sont ni cédées à des tiers, ni exploitées à d\'autres fins. Conformément au RGPD, vous disposez d\'un droit d\'accès, de rectification et d\'effacement de vos données en écrivant à contact@photo-club-pavillonnais.fr.',
     ];
 
     private static ?array $cache = null;

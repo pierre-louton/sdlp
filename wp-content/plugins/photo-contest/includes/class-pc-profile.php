@@ -71,6 +71,11 @@ class PC_Profile {
             }
         }
 
+        // Opt-in « prochain concours » : booléen transmis explicitement (0/1) par le formulaire.
+        if ( array_key_exists( 'opt_in_prochain', $data ) ) {
+            $sanitized['opt_in_prochain'] = ! empty( $data['opt_in_prochain'] ) ? 1 : 0;
+        }
+
         if ( empty( $sanitized ) ) {
             return false;
         }

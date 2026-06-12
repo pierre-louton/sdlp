@@ -38,6 +38,7 @@ class PC_Photos {
         add_action( 'wp_ajax_pc_delete_photo', [ $this, 'ajax_delete' ] );
         add_action( 'wp_ajax_pc_reorder_photos',  [ $this, 'ajax_reorder' ] );
         add_action( 'wp_ajax_pc_update_titre',    [ $this, 'ajax_update_titre' ] );
+        add_action( 'wp_ajax_pc_change_category', [ $this, 'ajax_change_category' ] );
 
         // Hook interne : statut changé → notification
         add_action( 'pc_photo_statut_changed', [ $this, 'on_statut_changed' ], 10, 3 );
@@ -450,6 +451,74 @@ class PC_Photos {
     // ──────────────────────────────────────────────────────────────────────
     // Mise à jour titre (AJAX)
     // ──────────────────────────────────────────────────────────────────────
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Changement de catégorie (drag-drop)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Déplace une photo du candidat vers une autre catégorie.
+     * Revalide tout côté serveur : appartenance, dépôt actif, catégorie active, quota.
+     *
+     * @return array{success:bool, message?:string, category_id?:int}
+     */
+    public function changer_categorie( int $photo_id, int $category_id, int $user_id ): array {
+        global $wpdb;
+        $table = PC_Database::table( PC_Database::TABLE_PHOTOS );
+
+        $photo = $this->get_photo( $photo_id, $user_id );
+        if ( ! $photo ) {
+            return [ 'success' => false, 'message' => __( 'Photo introuvable.', PC_TEXT_DOMAIN ) ];
+        }
+        if ( ! PC_Settings::is_depot_actif() ) {
+            return [ 'success' => false, 'message' => __( 'Le dépôt est clôturé.', PC_TEXT_DOMAIN ) ];
+        }
+        $cat = $category_id > 0 ? PC_Categories::get( $category_id ) : null;
+        if ( ! $cat || empty( $cat['actif'] ) ) {
+            return [ 'success' => false, 'message' => __( 'Catégorie invalide.', PC_TEXT_DOMAIN ) ];
+        }
+        if ( (int) $photo['category_id'] === $category_id ) {
+            return [ 'success' => true, 'category_id' => $category_id ];
+        }
+
+        $quota = (int) PC_Settings::get( 'quota_photos', 5 );
+        $count = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE user_id = %d AND category_id = %d",
+            $user_id, $category_id
+        ) );
+        if ( $quota > 0 && $count >= $quota ) {
+            return [ 'success' => false, 'message' => __( 'Cette catégorie est complète.', PC_TEXT_DOMAIN ) ];
+        }
+
+        $max_ordre = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT MAX(ordre_affichage) FROM {$table} WHERE user_id = %d AND category_id = %d",
+            $user_id, $category_id
+        ) );
+        $wpdb->update(
+            $table,
+            [ 'category_id' => $category_id, 'ordre_affichage' => $max_ordre + 1 ],
+            [ 'id' => $photo_id, 'user_id' => $user_id ]
+        );
+
+        return [ 'success' => true, 'category_id' => $category_id ];
+    }
+
+    /**
+     * AJAX : déplacement de catégorie par glisser-déposer.
+     */
+    public function ajax_change_category(): void {
+        check_ajax_referer( 'pc_category_nonce', 'nonce' );
+        if ( ! current_user_can( 'pc_view_own_photos' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Non autorisé.', PC_TEXT_DOMAIN ) ] );
+        }
+        $photo_id    = (int) ( $_POST['photo_id'] ?? 0 );
+        $category_id = (int) ( $_POST['category_id'] ?? 0 );
+        $res = $this->changer_categorie( $photo_id, $category_id, get_current_user_id() );
+        if ( ! empty( $res['success'] ) ) {
+            wp_send_json_success( $res );
+        }
+        wp_send_json_error( $res );
+    }
 
     public function ajax_update_titre(): void {
         check_ajax_referer( 'pc_titre_nonce', 'nonce' );

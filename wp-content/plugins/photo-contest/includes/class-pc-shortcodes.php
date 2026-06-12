@@ -61,15 +61,16 @@ class PC_Shortcodes {
         wp_enqueue_style( 'pc-gallery', PC_PLUGIN_URL . 'public/css/pc-gallery.css', [], PC_VERSION . '.9' );
         wp_enqueue_script( 'pc-gallery', PC_PLUGIN_URL . 'public/js/pc-gallery.js', [], PC_VERSION . '.9', true );
         wp_localize_script( 'pc-gallery', 'pcGalleryConfig', [
-            'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-            'nonceGet'     => wp_create_nonce( 'pc_get_photos_nonce' ),
-            'nonceUpload'  => wp_create_nonce( 'pc_upload_nonce' ),
-            'nonceDelete'  => wp_create_nonce( 'pc_delete_nonce' ),
-            'nonceReorder' => wp_create_nonce( 'pc_reorder_nonce' ),
-            'nonceTitre'   => wp_create_nonce( 'pc_titre_nonce' ),
-            'quotaMax'     => (int) PC_Settings::get( 'quota_photos', 5 ),
-            'depotActif'   => PC_Settings::is_depot_actif(),
-            'statuts'      => PC_STATUTS_CANDIDAT,
+            'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
+            'nonceGet'      => wp_create_nonce( 'pc_get_photos_nonce' ),
+            'nonceUpload'   => wp_create_nonce( 'pc_upload_nonce' ),
+            'nonceDelete'   => wp_create_nonce( 'pc_delete_nonce' ),
+            'nonceReorder'  => wp_create_nonce( 'pc_reorder_nonce' ),
+            'nonceTitre'    => wp_create_nonce( 'pc_titre_nonce' ),
+            'nonceCategory' => wp_create_nonce( 'pc_category_nonce' ),
+            'quotaMax'      => (int) PC_Settings::get( 'quota_photos', 5 ),
+            'depotActif'    => PC_Settings::is_depot_actif(),
+            'statuts'       => PC_STATUTS_CANDIDAT,
         ] );
     }
 

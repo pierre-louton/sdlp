@@ -42,6 +42,51 @@ assertFalse( $photos->titre_contient_nom( 'Une martingale gagnante', $uid ),    
 assertFalse( $photos->titre_contient_nom( 'Coucher de soleil', $uid ),             'sans le nom -> false' );
 assertFalse( $photos->titre_contient_nom( '', $uid ),                              'titre vide -> false' );
 
+echo "\n== changer_categorie ==\n";
+$catA = PC_Categories::create( 'Cat A ' . uniqid() );
+$catB = PC_Categories::create( 'Cat B ' . uniqid() );
+$wpdb->insert( $photos_t, [
+    'user_id' => $uid, 'category_id' => $catA, 'titre' => 'X',
+    'nom_fichier' => 'x.jpg', 'chemin_fichier' => 'x.jpg',
+    'largeur_px' => 900, 'hauteur_px' => 600, 'ratio_type' => '3_2',
+    'taille_octets' => 100, 'statut' => 'en_attente', 'ordre_affichage' => 1,
+] );
+$pid = (int) $wpdb->insert_id;
+
+$r = $photos->changer_categorie( $pid, $catB, $uid );
+assertTrue( $r['success'], 'déplacement vers catégorie avec place -> success' );
+assertEq( $catB, (int) $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$photos_t} WHERE id=%d", $pid ) ), 'category_id mis à jour' );
+
+$r = $photos->changer_categorie( $pid, $catA, $uid + 999999 );
+assertFalse( $r['success'], 'photo d\'un autre candidat -> refus' );
+
+$r = $photos->changer_categorie( $pid, 0, $uid );
+assertFalse( $r['success'], 'catégorie 0 (Non classées) -> refus' );
+
+// Quota plein
+PC_Settings::set( 'quota_photos', 1 );
+$wpdb->insert( $photos_t, [
+    'user_id' => $uid, 'category_id' => $catA, 'titre' => 'Y',
+    'nom_fichier' => 'y.jpg', 'chemin_fichier' => 'y.jpg',
+    'largeur_px' => 900, 'hauteur_px' => 600, 'ratio_type' => '3_2',
+    'taille_octets' => 100, 'statut' => 'en_attente', 'ordre_affichage' => 1,
+] );
+$pid2 = (int) $wpdb->insert_id; // catA a 1 photo (pid2), pid est en catB
+$r = $photos->changer_categorie( $pid, $catA, $uid ); // catA quota 1 atteint -> refus
+assertFalse( $r['success'], 'catégorie cible pleine (quota atteint) -> refus' );
+PC_Settings::set( 'quota_photos', 5 );
+
+// Dépôt clôturé
+PC_Settings::set( 'date_fermeture_depot', '2000-01-01 00:00:00' );
+$r = $photos->changer_categorie( $pid, $catA, $uid );
+assertFalse( $r['success'], 'dépôt clôturé -> refus' );
+PC_Settings::set( 'date_fermeture_depot', '' );
+
+// Supprimer les photos AVANT les catégories (delete refuse si catégorie non vide)
+$wpdb->delete( $photos_t, [ 'user_id' => $uid ] );
+PC_Categories::delete( $catA );
+PC_Categories::delete( $catB );
+
 // ── Nettoyage ──
 $wpdb->delete( $photos_t,   [ 'user_id' => $uid ] );
 $wpdb->delete( $profiles_t, [ 'user_id' => $uid ] );

@@ -147,7 +147,6 @@
 
     const labelStatut  = STATUTS_LABELS[photo.statut] || photo.statut;
     const peutSuppr    = ['en_attente', 'refusee'].includes(photo.statut);
-    const peutPayer    = photo.statut === 'participation_demandee' && photo.url_paiement;
     const urlThumb     = photo.url_thumb;
 
     div.innerHTML = `
@@ -171,19 +170,7 @@
                 data-action="voir" data-id="${photo.id}">Voir</button>
         ${peutSuppr ? `<button class="pc-card__action-btn pc-card__action-btn--suppr"
                 data-action="supprimer" data-id="${photo.id}">Supprimer</button>` : ''}
-        ${peutPayer ? `<a class="pc-card__action-btn pc-card__action-btn--payer"
-                href="${escHTML(photo.url_paiement)}">Payer</a>` : ''}
       </div>`;
-
-    if ( peutPayer ) {
-      div.classList.add('pc-card--paiement-requis');
-      const actions = div.querySelector('.pc-card__actions');
-      if (actions) {
-        actions.style.opacity = '1';
-        actions.style.transform = 'translateY(0)';
-        actions.style.pointerEvents = 'auto';
-      }
-    }
 
     // Lazy load avec fade-in
     const img = div.querySelector('.pc-card__img');
@@ -664,13 +651,11 @@
   // ── Couleur de point filtre sidebar ───────────────────────────────
   function couleurStatut(slug) {
     const map = {
-      en_attente:             '#4a7fa5',
-      en_examen:              '#c49a3c',
-      retenue:                '#4da876',
-      refusee:                '#b05050',
-      participation_demandee: '#9a6ec4',
-      paiement_recu:          '#4da876',
-      au_catalogue:           '#c49a3c',
+      en_attente:   '#4a7fa5',
+      en_examen:    '#c49a3c',
+      retenue:      '#4da876',
+      refusee:      '#b05050',
+      au_catalogue: '#c49a3c',
     };
     return map[slug] || '#555450';
   }

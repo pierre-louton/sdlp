@@ -4,7 +4,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Module Paiements — Stripe Checkout.
  *
- * Flux : page de paiement → Session Checkout → webhook → update_statut('paiement_recu')
+ * Flux : caddy profil → endpoint /?pc_pay=<token> → Stripe Checkout → webhook → lignes paiement_recu
+ * (le statut jury de la photo n'est PAS modifié par le paiement)
  * Webhook URL : <home_url>/?pc_stripe_webhook=1
  * Prérequis  : composer require stripe/stripe-php
  */
@@ -563,15 +564,4 @@ class PC_Payments {
         }
     }
 
-    // ── Utilitaires ───────────────────────────────────────────────────
-
-    public function get_thumb_url( int $photo_id ): string {
-        $token = wp_create_nonce( "pc_photo_{$photo_id}_" . get_current_user_id() );
-        return add_query_arg( [ 'pc_photo' => $photo_id, 'taille' => 'thumb', 'token' => $token ], home_url( '/' ) );
-    }
-
-    public function maybe_enqueue_assets(): void {
-        if ( isset( $_GET['pc_action'] ) )
-            wp_enqueue_style( 'pc-payment', PC_PLUGIN_URL . 'public/css/pc-payment.css', [], PC_VERSION . '.2' );
-    }
 }

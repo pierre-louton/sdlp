@@ -90,6 +90,24 @@ assertEq( 0, $dup, 'pas de ligne pour une photo déjà payée' );
 $wpdb->update( $payments_t, [ 'statut_paiement' => 'paiement_recu' ], [ 'payment_token' => $token ] );
 assertEq( '', $pay->creer_lignes_panier( $uid ), 'plus rien à payer -> vide' );
 
+// ⚠️ execute_cloture agit sur toute la base — à lancer sur une base de dev uniquement.
+// Les photos en_attente/en_examen de TOUS les utilisateurs seront passées en refusee.
+echo "\n== execute_cloture : retenue -> au_catalogue, restantes -> refusee, aucun paiement créé ==\n";
+$wpdb->update( $photos_t, [ 'statut' => 'retenue' ],    [ 'id' => $p4 ] );
+$wpdb->update( $photos_t, [ 'statut' => 'en_attente' ], [ 'id' => $p5 ] );
+PC_Settings::set( 'cloture_effectuee_at', 0 );
+PC_Settings::set( 'cloture_en_cours', 0 );
+$paiements_avant = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$payments_t}" );
+
+PC_Payments::execute_cloture();
+
+assertEq( 'au_catalogue', $wpdb->get_var( $wpdb->prepare( "SELECT statut FROM {$photos_t} WHERE id=%d", $p4 ) ), 'retenue -> au_catalogue' );
+assertEq( 'refusee',      $wpdb->get_var( $wpdb->prepare( "SELECT statut FROM {$photos_t} WHERE id=%d", $p5 ) ), 'en_attente restante -> refusee' );
+$paiements_apres = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$payments_t}" );
+assertEq( $paiements_avant, $paiements_apres, 'aucune ligne de paiement créée à la clôture' );
+PC_Settings::set( 'cloture_effectuee_at', 0 );
+PC_Settings::set( 'cloture_en_cours', 0 );
+
 // ── Nettoyage ──
 $wpdb->delete( $payments_t, [ 'user_id' => $uid ] );
 $wpdb->delete( $photos_t,   [ 'user_id' => $uid ] );

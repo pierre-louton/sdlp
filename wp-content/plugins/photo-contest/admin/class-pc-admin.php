@@ -91,17 +91,58 @@ class PC_Admin {
         // Checkboxes activations
         $checkboxes = [
             'depot_actif'     => __( 'Dépôt de photos actif', PC_TEXT_DOMAIN ),
-            'jury_actif'      => __( 'Phase jury active', PC_TEXT_DOMAIN ),
-            'catalogue_actif' => __( 'Catalogue actif', PC_TEXT_DOMAIN ),
+            'jury_actif'      => __( 'Forcer l\'ouverture du jury (sinon auto à la clôture du dépôt)', PC_TEXT_DOMAIN ),
+            'catalogue_actif' => __( 'Forcer l\'affichage du catalogue (sinon auto à la clôture de la délibération)', PC_TEXT_DOMAIN ),
+        ];
+        $cb_desc = [
+            'jury_actif'      => __( 'Coché = jury ouvert immédiatement, quelles que soient les dates et l\'état de clôture (utile en test). Décoché = ouverture automatique dès la date de clôture du dépôt.', PC_TEXT_DOMAIN ),
+            'catalogue_actif' => __( 'Coché = catalogue visible immédiatement (utile en test). Sinon activé automatiquement lors de la clôture de la délibération.', PC_TEXT_DOMAIN ),
         ];
         foreach ( $checkboxes as $key => $label ) {
-            printf( '<tr><th>%s</th><td><input type="checkbox" name="pc_settings[%s]" value="1" %s></td></tr>',
-                esc_html( $label ), esc_attr( $key ), checked( ! empty( $s[ $key ] ), true, false )
+            $desc = isset( $cb_desc[ $key ] )
+                ? '<p class="description">' . esc_html( $cb_desc[ $key ] ) . '</p>'
+                : '';
+            printf( '<tr><th>%s</th><td><input type="checkbox" name="pc_settings[%s]" value="1" %s>%s</td></tr>',
+                esc_html( $label ), esc_attr( $key ), checked( ! empty( $s[ $key ] ), true, false ), $desc
             );
         }
 
         echo '</table>';
 
+        // ── Calendrier du concours ──────────────────────────────────────
+        $fmt_input = static function ( string $stored ): string {
+            $stored = trim( $stored );
+            if ( $stored === '' ) {
+                return '';
+            }
+            try {
+                return ( new DateTimeImmutable( $stored, wp_timezone() ) )->format( 'Y-m-d\TH:i' );
+            } catch ( Exception $e ) {
+                return '';
+            }
+        };
+        ?>
+        <h2 style="margin-top:24px"><?php esc_html_e( 'Calendrier du concours', PC_TEXT_DOMAIN ); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="date_ouverture"><?php esc_html_e( 'Ouverture du dépôt', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="datetime-local" id="date_ouverture" name="pc_settings[date_ouverture]"
+                           value="<?php echo esc_attr( $fmt_input( $s['date_ouverture'] ?? '' ) ); ?>">
+                    <p class="description"><?php esc_html_e( 'Date et heure d\'ouverture du dépôt. Vide = aucune contrainte. Heure du fuseau du site (Réglages → Général).', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="date_fermeture_depot"><?php esc_html_e( 'Clôture du dépôt', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <input type="datetime-local" id="date_fermeture_depot" name="pc_settings[date_fermeture_depot]"
+                           value="<?php echo esc_attr( $fmt_input( $s['date_fermeture_depot'] ?? '' ) ); ?>">
+                    <p class="description"><?php esc_html_e( 'Au-delà de cette date : le dépôt ferme et la phase jury s\'ouvre automatiquement.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+        </table>
+
+        <?php
         // ── Photos ──────────────────────────────────────────────────────
         ?>
         <h2 style="margin-top:24px"><?php esc_html_e( 'Photos', PC_TEXT_DOMAIN ); ?></h2>
@@ -247,6 +288,10 @@ class PC_Admin {
         $clean['relance_jours']                = max( 0, min( 30,  (int) ( $data['relance_jours'] ?? 5 ) ) );
         $clean['relance_max']                  = max( 0, min( 5,   (int) ( $data['relance_max'] ?? 2 ) ) );
         $clean['poids_max_mo']                 = max( 1, min( 100, (int) ( $data['poids_max_mo'] ?? 40 ) ) );
+        // Dates calendrier : normalisées en heure murale du fuseau du site (Y-m-d H:i:s).
+        foreach ( [ 'date_ouverture', 'date_fermeture_depot' ] as $dk ) {
+            $clean[ $dk ] = PC_Settings::normalize_stored_date( (string) ( $data[ $dk ] ?? '' ) );
+        }
         PC_Settings::set( $clean );
         add_action( 'admin_notices', fn() => print '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Paramètres enregistrés.', PC_TEXT_DOMAIN ) . '</p></div>' );
     }

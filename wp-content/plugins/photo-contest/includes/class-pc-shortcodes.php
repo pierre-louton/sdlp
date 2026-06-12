@@ -160,7 +160,7 @@ class PC_Shortcodes {
         if ( ! is_user_logged_in() || ! PC_Roles::is_jury() )
             return '<p class="pc-notice">' . esc_html__( 'Accès réservé aux membres du jury.', 'photo-contest' ) . '</p>';
 
-        if ( ! PC_Settings::get( 'jury_actif', false ) )
+        if ( ! PC_Settings::is_jury_actif() )
             return '<p class="pc-notice">' . esc_html__( 'La phase de délibération n\'est pas encore ouverte.', 'photo-contest' ) . '</p>';
 
         $jury_user_id = get_current_user_id();

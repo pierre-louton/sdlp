@@ -90,6 +90,11 @@ assertEq( 0, $dup, 'pas de ligne pour une photo déjà payée' );
 $wpdb->update( $payments_t, [ 'statut_paiement' => 'paiement_recu' ], [ 'payment_token' => $token ] );
 assertEq( '', $pay->creer_lignes_panier( $uid ), 'plus rien à payer -> vide' );
 
+echo "\n== candidats_avec_photos_non_payees ==\n";
+$p6 = $mk_photo(); // nouvelle photo non payée pour $uid
+$cibles = array_map( 'intval', PC_Payments::get_instance()->candidats_avec_photos_non_payees() );
+assertTrue( in_array( $uid, $cibles, true ), 'candidat avec photo non payée ciblé' );
+
 // ⚠️ execute_cloture agit sur toute la base — à lancer sur une base de dev uniquement.
 // Les photos en_attente/en_examen de TOUS les utilisateurs seront passées en refusee.
 echo "\n== execute_cloture : retenue -> au_catalogue, restantes -> refusee, aucun paiement créé ==\n";

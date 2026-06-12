@@ -194,19 +194,19 @@ class PC_Admin {
         <h2 style="margin-top:24px"><?php esc_html_e( 'Relances impayés (Phase 2)', PC_TEXT_DOMAIN ); ?></h2>
         <table class="form-table">
             <tr>
-                <th><label for="relance_jours"><?php esc_html_e( 'Délai entre relances (jours)', PC_TEXT_DOMAIN ); ?></label></th>
+                <th><label for="relance_offset_1"><?php esc_html_e( '1re relance (jours avant clôture)', PC_TEXT_DOMAIN ); ?></label></th>
                 <td>
-                    <input type="number" min="0" max="30" id="relance_jours" name="pc_settings[relance_jours]"
-                           value="<?php echo esc_attr( $s['relance_jours'] ?? 5 ); ?>" class="small-text">
-                    <p class="description"><?php esc_html_e( '0 = relances désactivées. Défaut : 5.', PC_TEXT_DOMAIN ); ?></p>
+                    <input type="number" min="0" max="60" id="relance_offset_1" name="pc_settings[relance_offset_1]"
+                           value="<?php echo esc_attr( $s['relance_offset_1'] ?? 10 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( '0 = désactivée. Défaut : 10 (J-10).', PC_TEXT_DOMAIN ); ?></p>
                 </td>
             </tr>
             <tr>
-                <th><label for="relance_max"><?php esc_html_e( 'Nombre maximum de relances', PC_TEXT_DOMAIN ); ?></label></th>
+                <th><label for="relance_offset_2"><?php esc_html_e( '2e relance (jours avant clôture)', PC_TEXT_DOMAIN ); ?></label></th>
                 <td>
-                    <input type="number" min="0" max="5" id="relance_max" name="pc_settings[relance_max]"
-                           value="<?php echo esc_attr( $s['relance_max'] ?? 2 ); ?>" class="small-text">
-                    <p class="description"><?php esc_html_e( '0 = relances désactivées. Défaut : 2.', PC_TEXT_DOMAIN ); ?></p>
+                    <input type="number" min="0" max="60" id="relance_offset_2" name="pc_settings[relance_offset_2]"
+                           value="<?php echo esc_attr( $s['relance_offset_2'] ?? 5 ); ?>" class="small-text">
+                    <p class="description"><?php esc_html_e( '0 = désactivée. Défaut : 5 (J-5).', PC_TEXT_DOMAIN ); ?></p>
                 </td>
             </tr>
         </table>
@@ -285,8 +285,8 @@ class PC_Admin {
         // Phase 2 : bornes des nouveaux réglages
         $clean['email_batch_size']             = max( 1, min( 100, (int) ( $data['email_batch_size'] ?? 20 ) ) );
         $clean['email_batch_interval_minutes'] = max( 1, min( 60,  (int) ( $data['email_batch_interval_minutes'] ?? 5 ) ) );
-        $clean['relance_jours']                = max( 0, min( 30,  (int) ( $data['relance_jours'] ?? 5 ) ) );
-        $clean['relance_max']                  = max( 0, min( 5,   (int) ( $data['relance_max'] ?? 2 ) ) );
+        $clean['relance_offset_1']             = max( 0, min( 60, (int) ( $data['relance_offset_1'] ?? 10 ) ) );
+        $clean['relance_offset_2']             = max( 0, min( 60, (int) ( $data['relance_offset_2'] ?? 5 ) ) );
         $clean['poids_max_mo']                 = max( 1, min( 100, (int) ( $data['poids_max_mo'] ?? 40 ) ) );
         // Dates calendrier : normalisées en heure murale du fuseau du site (Y-m-d H:i:s).
         foreach ( [ 'date_ouverture', 'date_fermeture_depot' ] as $dk ) {

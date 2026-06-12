@@ -113,25 +113,81 @@ class PC_Settings {
 
     /**
      * Vérifie si le dépôt de photos est actuellement actif.
-     * Tient compte du flag admin ET des dates de concours.
+     * Interrupteur maître `depot_actif` ET fenêtre de dates [ouverture ; clôture].
+     * Comparaisons ancrées sur wp_timezone() (voir date_to_ts) — jamais l'horloge serveur.
      */
     public static function is_depot_actif(): bool {
         if ( ! self::get( 'depot_actif' ) ) {
             return false;
         }
+        $now       = time();
+        $ouverture = self::date_to_ts( self::get( 'date_ouverture' ) );
+        $fermeture = self::date_to_ts( self::get( 'date_fermeture_depot' ) );
 
-        $ouverture  = self::get( 'date_ouverture' );
-        $fermeture  = self::get( 'date_fermeture_depot' );
-        $now        = current_time( 'mysql' );
-
-        if ( $ouverture && $now < $ouverture ) {
+        if ( $ouverture !== null && $now < $ouverture ) {
             return false; // pas encore ouvert
         }
-        if ( $fermeture && $now > $fermeture ) {
+        if ( $fermeture !== null && $now > $fermeture ) {
             return false; // clôturé
         }
-
         return true;
+    }
+
+    /**
+     * Vérifie si la phase jury (délibération) est actuellement ouverte.
+     *
+     * Ordre de priorité :
+     *  1. Case `jury_actif` cochée -> true (forçage manuel, prioritaire sur dates ET clôture ; usage test)
+     *  2. Clôture effectuée (cloture_effectuee_at > 0) -> false (chemin automatique verrouillé)
+     *  3. time() >= date_fermeture_depot -> true (ouverture automatique)
+     *  4. sinon false
+     */
+    public static function is_jury_actif(): bool {
+        if ( self::get( 'jury_actif' ) ) {
+            return true;
+        }
+        if ( (int) self::get( 'cloture_effectuee_at', 0 ) > 0 ) {
+            return false;
+        }
+        $fermeture = self::date_to_ts( self::get( 'date_fermeture_depot' ) );
+        return $fermeture !== null && time() >= $fermeture;
+    }
+
+    /**
+     * Normalise une saisie de date (ex. datetime-local "Y-m-d\TH:i") en "Y-m-d H:i:s",
+     * interprétée comme heure murale du fuseau du site. Chaîne vide si vide ou invalide.
+     * Utilisé à la sauvegarde des réglages admin.
+     */
+    public static function normalize_stored_date( string $value ): string {
+        $value = trim( $value );
+        if ( $value === '' ) {
+            return '';
+        }
+        try {
+            return ( new DateTimeImmutable( $value, wp_timezone() ) )->format( 'Y-m-d H:i:s' );
+        } catch ( Exception $e ) {
+            return '';
+        }
+    }
+
+    /**
+     * Convertit une date stockée (heure murale du fuseau du site, sans fuseau explicite)
+     * en timestamp epoch UTC, comparable à time(). null si vide/invalide.
+     *
+     * CRITIQUE : on ancre sur wp_timezone() (Réglages -> Général), jamais sur strtotime()/date()
+     * nus ni l'horloge serveur. Laragon (dev) et O2Switch (prod) n'ont pas le même fuseau système ;
+     * cet ancrage garantit que la deadline se déclenche au même instant réel partout.
+     */
+    private static function date_to_ts( mixed $value ): ?int {
+        $value = is_string( $value ) ? trim( $value ) : '';
+        if ( $value === '' ) {
+            return null;
+        }
+        try {
+            return ( new DateTimeImmutable( $value, wp_timezone() ) )->getTimestamp();
+        } catch ( Exception $e ) {
+            return null;
+        }
     }
 
     /**

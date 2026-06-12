@@ -458,16 +458,9 @@ class PC_Payments {
     private function on_checkout_completed( object $session ): void {
         $photo_id = (int) ( $session->metadata->pc_photo_id ?? 0 );
         $user_id  = (int) ( $session->metadata->pc_user_id  ?? 0 );
-        $type     = $session->metadata->pc_type ?? 'impression';
         $token    = (string) ( $session->metadata->pc_payment_token ?? '' );
 
         if ( ! $user_id ) return;
-
-        // Paiement d'inscription (avant dépôt photos)
-        if ( $type === 'inscription' ) {
-            do_action( 'pc_inscription_paiement_recu', $user_id );
-            return;
-        }
 
         // Phase 2 Task 9 : paiement groupé par token (plusieurs photos en une session)
         if ( $token !== '' ) {

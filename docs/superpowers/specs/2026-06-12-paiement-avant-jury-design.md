@@ -144,6 +144,17 @@ Réécriture de la séquence :
 catalogue). La page admin « Clôture délibération » est mise à jour en conséquence
 (retrait du récap financier, du total à encaisser).
 
+#### Alimentation du catalogue (correction post-audit)
+
+`PC_Catalogue` alimente aujourd'hui le catalogue quand une photo passe au statut
+**`paiement_recu`** (`class-pc-catalogue.php:32`, `on_statut_changed`). Ce statut photo
+**disparaît du flux** : sans correction, le catalogue ne se remplirait jamais. Le
+déclencheur est déplacé de `paiement_recu` → **`au_catalogue`** : la création de l'entrée
+catalogue se fait quand la clôture jury bascule `retenue → au_catalogue`. La requête
+d'export (`class-pc-catalogue.php:65`) qui joint `wp_pc_payments` sur `paiement_recu` pour
+afficher « Payé/En attente » reste correcte (toute photo au catalogue a, par construction,
+une ligne `paiement_recu` payée avant le jury).
+
 ### 5. Relances J-10 / J-5 — `includes/class-pc-payments.php` (cron)
 
 Le hook `pc_relance_impayes_daily` (déjà planifié quotidiennement) est réorienté :
@@ -236,15 +247,77 @@ Tests Stripe **live** (session réelle + webhook) : manuels, via le subagent
 - Galerie glisser-déposer / édition de titres (sous-projet 2).
 - Mentions RGPD / opt-in prochain concours (sous-projet 3).
 
+## Révisions post-audit du code
+
+L'audit `grep` des points d'appel a révélé trois couplages que la première version de la
+spec sous-estimait. Décisions validées :
+
+### A. Onboarding : suppression du forfait d'inscription
+
+Le profil contient une étape **active** « Participation » (`templates/profile.php:193-225`)
+où le candidat paie un **forfait unique** (`montant_participation_cts`) à l'inscription,
+*avant* de pouvoir déposer. La machine à états `PC_Registration::get_etape()` est :
+`email_non_verifie → profil_incomplet → reglement_non_accepte → paiement_requis → complet`,
+et `PC_Registration::peut_deposer()` exige `complet`.
+
+**Décision : suppression du forfait.** Le modèle devient « paiement par photo » uniquement.
+
+- `get_etape()` perd l'état `paiement_requis` :
+  `… → reglement_non_accepte → complet`. `complet` = règlement accepté.
+- `peut_deposer()` = `complet` (donc = règlement accepté). Le dépôt devient libre après
+  acceptation du règlement.
+- La colonne `paiement_inscription_recu` (table profiles) cesse d'être un gate (conservée
+  en base, plus consultée — pas de migration destructive).
+- Suppression de `PC_Registration::on_inscription_paiement_recu()`, du hook
+  `pc_inscription_paiement_recu`, et de la branche `type === 'inscription'` du webhook
+  (`on_checkout_completed`).
+- `templates/profile.php` : retrait de la section « Étape 3 : Participation » forfaitaire.
+  L'indicateur d'étapes passe à **2 étapes** (Profil, Règlement). Le **caddy** est une
+  section du profil affichée une fois `complet`.
+
+### B. Alimentation du catalogue (déjà documentée plus haut)
+
+Déclencheur déplacé `paiement_recu` → `au_catalogue` dans `PC_Catalogue::on_statut_changed`.
+
+### C. Webhook : ne plus basculer le statut photo
+
+`on_token_checkout_completed()` (`class-pc-payments.php:504`) marque les paiements
+`paiement_recu` **et** appelle `update_statut(photo, 'paiement_recu')`. Dans le nouveau
+modèle, le paiement ne change **pas** le statut jury de la photo (elle reste `en_attente`).
+On retire l'appel `update_statut`. Idem pour la branche mono-photo `on_checkout_completed`
+(lignes 480-491), retirée avec le reste du paiement post-jury.
+
+### D. Cases Fluent CRM mortes
+
+`PC_Fluent_CRM::on_statut_change` traite `participation_demandee` (génère un lien de
+paiement) et `paiement_recu` (tag payé + automation). Ces `case` deviennent inatteignables
+(aucune photo n'atteint ces statuts) → suppression. Conserver `retenue`, `refusee`,
+`au_catalogue`. Le tag « payé » (`fluent_tag_paye`) est désormais posé au webhook du panier.
+
+### E. Relances : réécriture complète
+
+`cron_relances_quotidiennes()` (`class-pc-payments.php:795`) est bâti sur l'ancien modèle
+(relancer des lignes de paiement `en_attente` déjà initiées avec `email_envoye_at`). Le
+nouveau cron est piloté par date (J-10 / J-5 avant `date_fermeture_depot`) et cible les
+candidats ayant des **photos** `en_attente` non payées (pas des lignes de paiement). Le
+lien de la relance pointe vers la **page profil** (caddy), pas vers `/?pc_pay=` (le
+candidat n'a pas encore de token). Réécriture intégrale de la méthode.
+
 ## Fichiers touchés (prévision)
 
-- `includes/class-pc-payments.php` (caddy, panier, clôture, relances, nettoyage)
+- `includes/class-pc-payments.php` (caddy, panier, webhook, clôture, relances, nettoyage)
 - `includes/class-pc-jury.php` (`get_photos_pour_jury`)
+- `includes/class-pc-catalogue.php` (alimentation sur `au_catalogue`)
+- `includes/class-pc-registration.php` (machine à états sans `paiement_requis`, retrait inscription payée)
+- `includes/class-pc-fluent-crm.php` (retrait des `case` morts)
 - `includes/class-pc-database.php` (index `idx_photo_statut`, upgrade)
-- `includes/class-pc-settings.php` (réglages relances)
+- `includes/class-pc-settings.php` (réglages relances, retrait email_batch)
+- `includes/class-pc-shortcodes.php` (audit statuts `participation_demandee`)
+- `photo-contest.php` (retrait alias statuts morts, `wp_clear_scheduled_hook` email batch)
 - `admin/class-pc-admin.php` (réglages relances, retrait email_batch)
 - `admin/class-pc-cloture-admin.php` (récap sans volet financier)
-- `templates/profile.php` (caddy)
-- `templates/gallery.php` (badges)
+- `templates/profile.php` (retrait étape forfait, caddy)
+- `templates/gallery.php` (badges payée/non payée)
+- `templates/payment.php` (obsolète — à retirer)
 - `public/js/` (déclenchement session panier)
 - `tests/test-pc-caddy.php` (nouveau)

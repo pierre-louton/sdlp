@@ -176,6 +176,17 @@ class PC_Admin {
                 </td>
             </tr>
         </table>
+        ?>
+        <h2 style="margin-top:24px"><?php esc_html_e( 'Données personnelles (RGPD)', PC_TEXT_DOMAIN ); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="rgpd_texte"><?php esc_html_e( 'Mention RGPD (profil candidat)', PC_TEXT_DOMAIN ); ?></label></th>
+                <td>
+                    <textarea id="rgpd_texte" name="pc_settings[rgpd_texte]" rows="5" class="large-text"><?php echo esc_textarea( $s['rgpd_texte'] ?? '' ); ?></textarea>
+                    <p class="description"><?php esc_html_e( 'Texte affiché dans le profil du candidat sous son adresse email.', PC_TEXT_DOMAIN ); ?></p>
+                </td>
+            </tr>
+        </table>
         <?php
 
         printf( '<p class="submit"><input type="submit" class="button-primary" value="%s"></p>', esc_attr__( 'Enregistrer', PC_TEXT_DOMAIN ) );
@@ -252,6 +263,7 @@ class PC_Admin {
         $clean['relance_offset_1']             = max( 0, min( 60, (int) ( $data['relance_offset_1'] ?? 10 ) ) );
         $clean['relance_offset_2']             = max( 0, min( 60, (int) ( $data['relance_offset_2'] ?? 5 ) ) );
         $clean['poids_max_mo']                 = max( 1, min( 100, (int) ( $data['poids_max_mo'] ?? 40 ) ) );
+        $clean['rgpd_texte']                   = isset( $data['rgpd_texte'] ) ? sanitize_textarea_field( $data['rgpd_texte'] ) : PC_Settings::get( 'rgpd_texte', '' );
         // Dates calendrier : normalisées en heure murale du fuseau du site (Y-m-d H:i:s).
         foreach ( [ 'date_ouverture', 'date_fermeture_depot' ] as $dk ) {
             $clean[ $dk ] = PC_Settings::normalize_stored_date( (string) ( $data[ $dk ] ?? '' ) );

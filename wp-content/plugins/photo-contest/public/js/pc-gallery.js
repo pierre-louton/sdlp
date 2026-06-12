@@ -209,6 +209,14 @@
       titreInput.addEventListener('click', e => e.stopPropagation());
     }
 
+    // Badge payée / non payée
+    var badge = document.createElement('span');
+    badge.className = 'pc-pay-badge ' + (photo.paye ? 'pc-pay-badge--ok' : 'pc-pay-badge--ko');
+    badge.textContent = photo.paye
+      ? 'payée'
+      : (CFG.depotActif ? 'non payée' : 'non payée — non examinée');
+    div.appendChild(badge);
+
     // Sélection par clic
     div.addEventListener('click', e => {
       if (e.target.dataset.action) return; // délégué aux boutons

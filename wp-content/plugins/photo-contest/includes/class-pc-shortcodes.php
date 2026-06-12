@@ -209,10 +209,21 @@ class PC_Shortcodes {
         $quota      = (int) PC_Settings::get( 'quota_photos', 5 );
         $categories = PC_Categories::get_all( true ); // only active
 
-        // Enrichir chaque photo (URLs)
-        $photos = array_map( function ( $photo ) use ( $user_id ) {
+        // Précharger les IDs de photos payées en une seule requête (évite N requêtes)
+        global $wpdb;
+        $payes = array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT pay.photo_id
+             FROM " . PC_Database::table( PC_Database::TABLE_PAYMENTS ) . " pay
+             JOIN " . PC_Database::table( PC_Database::TABLE_PHOTOS ) . " p ON p.id = pay.photo_id
+             WHERE p.user_id = %d AND pay.statut_paiement = 'paiement_recu'",
+            $user_id
+        ) ) );
+
+        // Enrichir chaque photo (URLs + flag paye)
+        $photos = array_map( function ( $photo ) use ( $user_id, $payes ) {
             $photo['url_thumb'] = $this->get_photo_url( (int) $photo['id'], 'thumb' );
             $photo['url_full']  = $this->get_photo_url( (int) $photo['id'], 'full' );
+            $photo['paye']      = in_array( (int) $photo['id'], $payes, true );
 
             if ( $photo['statut'] === 'participation_demandee' ) {
                 $token = wp_create_nonce( "pc_payment_{$user_id}_{$photo['id']}" );

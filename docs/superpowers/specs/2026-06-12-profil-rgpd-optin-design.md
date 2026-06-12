@@ -49,7 +49,7 @@ Dans le profil candidat (`/mon-profil/`, `[photo_contest_profile]`) :
 **`includes/class-pc-settings.php`** — ajouter à `$defaults` :
 
 ```php
-        'rgpd_texte' => 'Les informations recueillies dans ce formulaire sont enregistrées par le Photo Club Pavillonnais et utilisées uniquement pour la gestion de votre participation au concours photo (inscription, délibération du jury, paiement, catalogue). Elles ne sont ni cédées à des tiers, ni exploitées à d\'autres fins. Conformément au RGPD, vous disposez d\'un droit d\'accès, de rectification et d\'effacement de vos données en contactant l\'organisateur.',
+        'rgpd_texte' => 'Les informations recueillies dans ce formulaire sont enregistrées par le Photo Club Pavillonnais et utilisées uniquement pour la gestion de votre participation au concours photo (inscription, délibération du jury, paiement, catalogue). Elles ne sont ni cédées à des tiers, ni exploitées à d\'autres fins. Conformément au RGPD, vous disposez d\'un droit d\'accès, de rectification et d\'effacement de vos données en écrivant à contact@photo-club-pavillonnais.fr.',
 ```
 
 **`admin/class-pc-admin.php`** — ajouter un champ `textarea` « Mention RGPD (profil candidat) »
